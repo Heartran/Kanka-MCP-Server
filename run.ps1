@@ -1,4 +1,6 @@
 cd C:\actions-runner\repo\Kanka-MCP-Server
+git fetch
+git pull
 npm install
 tailscale funnel 5000
-$env:PORT="5000"; node index.js
+$env:PORT = "5000"; node index.js
