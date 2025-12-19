@@ -45,27 +45,31 @@ const entities = [
   { name: "Entity", plural: "entities" },
 ];
 
+/**
+ * Crea un'istanza del server MCP configurata.
+ * tokenOverride permette di usare il token passato via URL.
+ */
 function createKankaServer(tokenOverride = "") {
   const server = new Server(
-    { name: "kanka-mcp-server", version: "0.2.4" },
+    { name: "kanka-mcp-server", version: "0.2.5" },
     { capabilities: { tools: {} } }
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools = [
-      { name: "list_campaigns", description: "List all accessible campaigns", inputSchema: { type: "object", properties: { apiToken: { type: "string" } } } },
-      { name: "search", description: "Search for entities", inputSchema: { type: "object", properties: { campaignId: { type: "number" }, q: { type: "string" }, apiToken: { type: "string" } }, required: ["campaignId", "q"] } }
+      { name: "list_campaigns", description: "List all campaigns", inputSchema: { type: "object", properties: { apiToken: { type: "string" } } } },
+      { name: "search", description: "Search entities", inputSchema: { type: "object", properties: { campaignId: { type: "number" }, q: { type: "string" }, apiToken: { type: "string" } }, required: ["campaignId", "q"] } }
     ];
 
     entities.forEach(entity => {
       tools.push({
         name: `list_${entity.plural}`,
-        description: `List all ${entity.plural}`,
+        description: `List ${entity.plural} in campaign`,
         inputSchema: { type: "object", properties: { campaignId: { type: "number" }, page: { type: "number" }, apiToken: { type: "string" } }, required: ["campaignId"] }
       });
       tools.push({
         name: `get_${entity.name.toLowerCase()}`,
-        description: `Get a specific ${entity.name.toLowerCase()}`,
+        description: `Get details of a ${entity.name.toLowerCase()}`,
         inputSchema: { type: "object", properties: { campaignId: { type: "number" }, id: { type: "number" }, apiToken: { type: "string" } }, required: ["campaignId", "id"] }
       });
     });
@@ -92,7 +96,6 @@ function createKankaServer(tokenOverride = "") {
           if (entity) response = await kankaRequest(`/campaigns/${args.campaignId}/${entity.plural}/${args.id}`, "GET", {}, {}, token);
         }
       }
-
       if (!response) throw new Error(`Tool unknown: ${name}`);
       return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
     } catch (error) {
@@ -118,44 +121,60 @@ if (useStdio) {
   const activeSessions = new Map();
 
   app.get("/sse", async (req, res) => {
-    console.error(`[${new Date().toISOString()}] SSE connection attempt...`);
-
-    // Impostiamo gli header MA NON chiamiamo res.flushHeaders() e non usiamo res.writeHead()
-    // Lasciamo che SSEServerTransport.start() chiami writeHead, Express unirà questi header.
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.setHeader('Cache-Control', 'no-transform'); // Utile per alcuni proxy
-
     const token = req.query.token || "";
-    const transport = new SSEServerTransport("/message", res);
+
+    // Header per SSE e per prevenire il buffering dei proxy (Tailscale)
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    // Costruiamo l'URL dei messaggi usando l'host corrente (fondamentale per i tunnel)
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    const messageUrl = `${protocol}://${host}/message`;
+
+    const transport = new SSEServerTransport(messageUrl, res);
+    const sessionId = transport.sessionId;
     const serverInstance = createKankaServer(token);
 
+    // Registrazione sessione PRIMA del connect per evitare race conditions
+    activeSessions.set(sessionId, { transport, server: serverInstance });
+
+    console.error(`[${sessionId}] SSE attempt... Token: ${!!token}`);
+
     await serverInstance.connect(transport);
+    console.error(`[${sessionId}] SSE connected.`);
 
-    const sessionId = transport.sessionId;
-    activeSessions.set(sessionId, transport);
-
-    console.error(`[${sessionId}] SSE connected. Token: ${!!token}`);
+    // Heartbeat ogni 15s per mantenere aperta la connessione Tailscale
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': keep-alive\n\n');
+      }
+    }, 15000);
 
     res.on("close", () => {
-      console.error(`[${sessionId}] SSE closed.`);
-      activeSessions.set(sessionId, null); // Marciamo come chiusa invece di delete immediata per evitare race conditions su /message
-      setTimeout(() => activeSessions.delete(sessionId), 5000);
+      console.error(`[${sessionId}] SSE connection closed.`);
+      clearInterval(heartbeat);
+      // Mantieni la sessione per 60s per gestire eventuali messaggi in coda
+      setTimeout(() => activeSessions.delete(sessionId), 60000);
     });
   });
 
   app.post("/message", async (req, res) => {
     const sessionId = req.query.sessionId;
-    const transport = activeSessions.get(sessionId);
+    const session = activeSessions.get(sessionId);
 
-    if (transport) {
-      await transport.handlePostMessage(req, res);
+    if (session && session.transport) {
+      await session.transport.handlePostMessage(req, res);
     } else {
-      res.status(400).send("Session not found or closed");
+      console.error(`[${sessionId}] POST failed: Session not found.`);
+      res.status(400).send("Session not found or expired");
     }
   });
 
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
-    console.error(`Kanka MCP Server listening on port ${PORT} (SSE)`);
+    console.error(`Kanka MCP Server listening on port ${PORT} (SSE mode)`);
   });
 }
