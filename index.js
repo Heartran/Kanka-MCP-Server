@@ -45,13 +45,9 @@ const entities = [
   { name: "Entity", plural: "entities" },
 ];
 
-/**
- * Funzione per configurare un'istanza del server con tutti i suoi handler.
- * Creiamo un'istanza per ogni connessione SSE per garantire l'isolamento delle sessioni.
- */
 function createKankaServer(tokenOverride = "") {
   const server = new Server(
-    { name: "kanka-mcp-server", version: "0.2.3" },
+    { name: "kanka-mcp-server", version: "0.2.4" },
     { capabilities: { tools: {} } }
   );
 
@@ -107,7 +103,6 @@ function createKankaServer(tokenOverride = "") {
   return server;
 }
 
-// --- Startup ---
 const useStdio = process.argv.includes("--stdio") || !process.env.PORT;
 
 if (useStdio) {
@@ -120,34 +115,31 @@ if (useStdio) {
   app.use(cors());
   app.use(express.json());
 
-  // Mappa per gestire più sessioni SSE simultanee
   const activeSessions = new Map();
 
   app.get("/sse", async (req, res) => {
-    console.error(`[${new Date().toISOString()}] New SSE connection attempt...`);
+    console.error(`[${new Date().toISOString()}] SSE connection attempt...`);
 
-    // Header cruciali per evitare il buffering dei proxy (Tailscale, Nginx, etc.)
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+    // Impostiamo gli header MA NON chiamiamo res.flushHeaders() e non usiamo res.writeHead()
+    // Lasciamo che SSEServerTransport.start() chiami writeHead, Express unirà questi header.
     res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
+    res.setHeader('Cache-Control', 'no-transform'); // Utile per alcuni proxy
 
     const token = req.query.token || "";
     const transport = new SSEServerTransport("/message", res);
-    const server = createKankaServer(token);
+    const serverInstance = createKankaServer(token);
 
-    await server.connect(transport);
+    await serverInstance.connect(transport);
 
-    // Salviamo la sessione usando l'ID generato dall'SDK
     const sessionId = transport.sessionId;
     activeSessions.set(sessionId, transport);
 
-    console.error(`[${sessionId}] SSE connected. Token present: ${!!token}`);
+    console.error(`[${sessionId}] SSE connected. Token: ${!!token}`);
 
     res.on("close", () => {
-      console.error(`[${sessionId}] SSE connection closed.`);
-      activeSessions.delete(sessionId);
+      console.error(`[${sessionId}] SSE closed.`);
+      activeSessions.set(sessionId, null); // Marciamo come chiusa invece di delete immediata per evitare race conditions su /message
+      setTimeout(() => activeSessions.delete(sessionId), 5000);
     });
   });
 
@@ -158,13 +150,12 @@ if (useStdio) {
     if (transport) {
       await transport.handlePostMessage(req, res);
     } else {
-      console.error(`[${sessionId}] POST attempt failed: Session not found`);
-      res.status(400).send("Session not found");
+      res.status(400).send("Session not found or closed");
     }
   });
 
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
-    console.error(`Kanka MCP Server listening on port ${PORT} (SSE mode)`);
+    console.error(`Kanka MCP Server listening on port ${PORT} (SSE)`);
   });
 }
