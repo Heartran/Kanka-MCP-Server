@@ -47,7 +47,7 @@ const entities = [
 
 function createKankaServer(token) {
   const server = new Server(
-    { name: "kanka-mcp-server", version: "0.2.7" },
+    { name: "kanka-mcp-server", version: "0.2.8" },
     { capabilities: { tools: {} } }
   );
 
@@ -59,7 +59,7 @@ function createKankaServer(token) {
     entities.forEach(entity => {
       tools.push({
         name: `list_${entity.plural}`,
-        description: `List ${entity.plural} in campaign`,
+        description: `List ${entity.plural}`,
         inputSchema: { type: "object", properties: { campaignId: { type: "number" }, page: { type: "number" }, apiToken: { type: "string" } }, required: ["campaignId"] }
       });
       tools.push({
@@ -106,64 +106,52 @@ if (useStdio) {
   await server.connect(transport);
 } else {
   const app = express();
+  app.set('trust proxy', true); // Fondamentale per Tailscale Funnel
   app.use(cors());
   app.use(express.json());
 
   const activeSessions = new Map();
 
   app.get("/sse", async (req, res) => {
-    console.error(`[${new Date().toISOString()}] SSE connection request`);
+    console.error(`[${new Date().toISOString()}] SSE Attempt...`);
 
-    const token = req.query.token || "";
-
-    // Configura gli header INSIEME (senza inviarli ancora con write)
-    // Usiamo res.setHeader invece di res.write() per evitare il crash
+    // Header per forzare lo stream diretto
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-    const host = req.headers['x-forwarded-host'] || req.get('host');
-    const messageUrl = `${protocol}://${host}/message`;
+    const token = req.query.token || "";
 
-    // Lasciamo che SSEServerTransport gestisca l'invio degli header e l'inizializzazione
-    const transport = new SSEServerTransport(messageUrl, res);
+    // Usiamo un percorso relativo per l'endpoint dei messaggi
+    const transport = new SSEServerTransport("/message", res);
     const sessionId = transport.sessionId;
     const serverInstance = createKankaServer(token);
 
-    // Registrazione sessione
-    activeSessions.set(sessionId, { transport, server: serverInstance });
+    activeSessions.set(sessionId, transport);
 
-    try {
-      await serverInstance.connect(transport);
-      console.error(`[${sessionId}] SSE connected. Token: ${!!token}`);
+    await serverInstance.connect(transport);
+    console.error(`[${sessionId}] SSE Connected. Token: ${!!token}`);
 
-      // Heartbeat a basso livello (solo se la connessione è aperta)
-      const heartbeat = setInterval(() => {
-        if (!res.writableEnded) {
-          res.write(': keep-alive\n\n');
+    res.on("close", () => {
+      console.error(`[${sessionId}] SSE Closed.`);
+      // Teniamo la sessione viva per un po' per permettere il completamento dei POST
+      setTimeout(() => {
+        if (activeSessions.get(sessionId) === transport) {
+          activeSessions.delete(sessionId);
         }
-      }, 15000);
-
-      res.on("close", () => {
-        clearInterval(heartbeat);
-        console.error(`[${sessionId}] SSE closed.`);
-        setTimeout(() => activeSessions.delete(sessionId), 120000);
-      });
-    } catch (error) {
-      console.error(`[${sessionId}] Connection error:`, error);
-      activeSessions.delete(sessionId);
-    }
+      }, 60000);
+    });
   });
 
   app.post("/message", async (req, res) => {
     const sessionId = req.query.sessionId;
-    const session = activeSessions.get(sessionId);
+    const transport = activeSessions.get(sessionId);
 
-    if (session && session.transport) {
-      await session.transport.handlePostMessage(req, res);
+    if (transport) {
+      await transport.handlePostMessage(req, res);
     } else {
+      console.error(`[${sessionId}] POST Failed: Session unknown or expired.`);
       res.status(400).send("Session not found");
     }
   });
