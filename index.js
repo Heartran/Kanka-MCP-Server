@@ -1,9 +1,11 @@
 import express from "express";
 import axios from "axios";
+import cors from "cors";
 import { KANKA_API_BASE, KANKA_API_TOKEN } from "./config.js";
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 if (!KANKA_API_TOKEN) {
   console.warn("[warn] KANKA_API_TOKEN is not set. Set it before making API requests.");
