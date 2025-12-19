@@ -47,7 +47,7 @@ const entities = [
 
 function createKankaServer(token) {
   const server = new Server(
-    { name: "kanka-mcp-server", version: "0.2.6" },
+    { name: "kanka-mcp-server", version: "0.2.7" },
     { capabilities: { tools: {} } }
   );
 
@@ -59,7 +59,7 @@ function createKankaServer(token) {
     entities.forEach(entity => {
       tools.push({
         name: `list_${entity.plural}`,
-        description: `List ${entity.plural}`,
+        description: `List ${entity.plural} in campaign`,
         inputSchema: { type: "object", properties: { campaignId: { type: "number" }, page: { type: "number" }, apiToken: { type: "string" } }, required: ["campaignId"] }
       });
       tools.push({
@@ -112,22 +112,22 @@ if (useStdio) {
   const activeSessions = new Map();
 
   app.get("/sse", async (req, res) => {
+    console.error(`[${new Date().toISOString()}] SSE connection request`);
+
     const token = req.query.token || "";
 
-    // Header anti-buffering per Tailscale
+    // Configura gli header INSIEME (senza inviarli ancora con write)
+    // Usiamo res.setHeader invece di res.write() per evitare il crash
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    // BUFFER BREAKER: Inviamo una serie di commenti per "riempire" i buffer dei proxy
-    // e forzare la trasmissione immediata del primo evento.
-    res.write(": padding-break-buffer" + " ".repeat(2048) + "\n\n");
-
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const host = req.headers['x-forwarded-host'] || req.get('host');
     const messageUrl = `${protocol}://${host}/message`;
 
+    // Lasciamo che SSEServerTransport gestisca l'invio degli header e l'inizializzazione
     const transport = new SSEServerTransport(messageUrl, res);
     const sessionId = transport.sessionId;
     const serverInstance = createKankaServer(token);
@@ -135,20 +135,26 @@ if (useStdio) {
     // Registrazione sessione
     activeSessions.set(sessionId, { transport, server: serverInstance });
 
-    console.error(`[${sessionId}] SSE Attempt (Token: ${!!token})`);
+    try {
+      await serverInstance.connect(transport);
+      console.error(`[${sessionId}] SSE connected. Token: ${!!token}`);
 
-    await serverInstance.connect(transport);
+      // Heartbeat a basso livello (solo se la connessione è aperta)
+      const heartbeat = setInterval(() => {
+        if (!res.writableEnded) {
+          res.write(': keep-alive\n\n');
+        }
+      }, 15000);
 
-    const heartbeat = setInterval(() => {
-      if (!res.writableEnded) res.write(': heartbeat\n\n');
-    }, 15000);
-
-    res.on("close", () => {
-      console.error(`[${sessionId}] SSE connection closed.`);
-      clearInterval(heartbeat);
-      // NON impostiamo a null, lasciamo che la sessione scada naturalmente dopo 2 minuti
-      setTimeout(() => activeSessions.delete(sessionId), 120000);
-    });
+      res.on("close", () => {
+        clearInterval(heartbeat);
+        console.error(`[${sessionId}] SSE closed.`);
+        setTimeout(() => activeSessions.delete(sessionId), 120000);
+      });
+    } catch (error) {
+      console.error(`[${sessionId}] Connection error:`, error);
+      activeSessions.delete(sessionId);
+    }
   });
 
   app.post("/message", async (req, res) => {
@@ -158,13 +164,12 @@ if (useStdio) {
     if (session && session.transport) {
       await session.transport.handlePostMessage(req, res);
     } else {
-      console.error(`[${sessionId}] POST failed: Session missing.`);
       res.status(400).send("Session not found");
     }
   });
 
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, "0.0.0.0", () => {
-    console.error(`Kanka MCP Server ready on port ${PORT} (SSE)`);
+    console.error(`Kanka MCP Server listening on port ${PORT} (SSE)`);
   });
 }
