@@ -28,6 +28,10 @@ async function kankaRequest(path, method = "GET", data = {}, params = {}, token 
   return response;
 }
 
+app.get("/", (req, res) => {
+  res.send("Kanka MCP Server is running.");
+});
+
 app.post("/mcp/echo", (req, res) => {
   res.json({ success: true, received: req.body });
 });
