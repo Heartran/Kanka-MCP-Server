@@ -1,0 +1,13 @@
+{
+  "name": "kanka-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Minimal MCP-style proxy server for the Kanka REST API.",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "express": "^4.19.2"
+  }
+}
