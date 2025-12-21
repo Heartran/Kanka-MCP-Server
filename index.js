@@ -131,6 +131,22 @@ if (useStdio) {
   app.set('trust proxy', true); // Fondamentale per Tailscale Funnel
   app.use(cors());
   app.use(express.json());
+  // Custom error handler for JSON syntax errors
+  app.use((err, req, res, next) => {
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+      const timestamp = new Date().toISOString();
+      console.error(`[${timestamp}] Malformed JSON from ${req.ip} to ${req.path}: ${err.message}`);
+      return res.status(400).json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32700,
+          message: "Parse error: Invalid JSON was received by the server",
+        },
+        id: null,
+      });
+    }
+    next(err);
+  });
 
   const activeSessions = new Map();
 
