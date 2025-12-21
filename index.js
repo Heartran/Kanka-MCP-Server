@@ -1,14 +1,36 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import axios from "axios";
 import cors from "cors";
 import { KANKA_API_BASE, KANKA_API_TOKEN } from "./config.js";
+import { randomUUID } from "node:crypto";
+
+const sdk = await loadSdk();
+
+const {
+  Server,
+  StdioServerTransport,
+  SSEServerTransport,
+  StreamableHTTPServerTransport,
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  isInitializeRequest,
+} = sdk;
+
+async function loadSdk() {
+  // Prefer top-level SDK export when available; fall back to subpath modules for older builds.
+  try {
+    return await import("@modelcontextprotocol/sdk");
+  } catch (error) {
+    const [server, stdio, sse, streamableHttp, types] = await Promise.all([
+      import("@modelcontextprotocol/sdk/server/index.js"),
+      import("@modelcontextprotocol/sdk/server/stdio.js"),
+      import("@modelcontextprotocol/sdk/server/sse.js"),
+      import("@modelcontextprotocol/sdk/server/streamableHttp.js"),
+      import("@modelcontextprotocol/sdk/types.js"),
+    ]);
+    return { ...server, ...stdio, ...sse, ...streamableHttp, ...types };
+  }
+}
 
 // --- Kanka Client Logic ---
 const kankaClient = axios.create({
@@ -112,6 +134,91 @@ if (useStdio) {
 
   const activeSessions = new Map();
 
+  const getQueryValue = (value) => {
+    if (Array.isArray(value)) return value[0];
+    return value;
+  };
+
+  const isInitializePayload = (body) => {
+    if (!body) return false;
+    if (Array.isArray(body)) return body.some(item => isInitializeRequest(item));
+    return isInitializeRequest(body);
+  };
+
+  app.all("/mcp", async (req, res) => {
+    try {
+      const sessionIdHeader = req.headers["mcp-session-id"];
+      const sessionId = Array.isArray(sessionIdHeader)
+        ? sessionIdHeader[0]
+        : sessionIdHeader;
+      let transport;
+
+      if (sessionId && activeSessions.has(sessionId)) {
+        const existingTransport = activeSessions.get(sessionId);
+        if (existingTransport instanceof StreamableHTTPServerTransport) {
+          transport = existingTransport;
+        } else {
+          res.status(400).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: "Bad Request: Session exists but uses a different transport protocol",
+            },
+            id: null,
+          });
+          return;
+        }
+      } else if (!sessionId && req.method === "POST" && isInitializePayload(req.body)) {
+        const token = getQueryValue(req.query.token) || "";
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (newSessionId) => {
+            activeSessions.set(newSessionId, transport);
+          },
+          onsessionclosed: (closedSessionId) => {
+            if (activeSessions.get(closedSessionId) === transport) {
+              activeSessions.delete(closedSessionId);
+            }
+          },
+        });
+
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid && activeSessions.get(sid) === transport) {
+            activeSessions.delete(sid);
+          }
+        };
+
+        const serverInstance = createKankaServer(token);
+        await serverInstance.connect(transport);
+      } else {
+        res.status(400).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: "Bad Request: No valid session ID provided",
+          },
+          id: null,
+        });
+        return;
+      }
+
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error("Error handling MCP request:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32603,
+            message: "Internal server error",
+          },
+          id: null,
+        });
+      }
+    }
+  });
+
   app.get("/sse", async (req, res) => {
     console.error(`[${new Date().toISOString()}] SSE Attempt...`);
 
@@ -121,7 +228,7 @@ if (useStdio) {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const token = req.query.token || "";
+    const token = getQueryValue(req.query.token) || "";
 
     // Usiamo un percorso relativo per l'endpoint dei messaggi
     const transport = new SSEServerTransport("/message", res);
@@ -145,11 +252,41 @@ if (useStdio) {
   });
 
   app.post("/message", async (req, res) => {
-    const sessionId = req.query.sessionId;
-    const transport = activeSessions.get(sessionId);
+    const sessionId = getQueryValue(req.query.sessionId);
+    const transport = sessionId ? activeSessions.get(sessionId) : undefined;
 
-    if (transport) {
-      await transport.handlePostMessage(req, res);
+    if (transport instanceof SSEServerTransport) {
+      await transport.handlePostMessage(req, res, req.body);
+    } else if (sessionId && transport) {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message: "Bad Request: Session exists but uses a different transport protocol",
+        },
+        id: null,
+      });
+    } else {
+      console.error(`[${sessionId}] POST Failed: Session unknown or expired.`);
+      res.status(400).send("Session not found");
+    }
+  });
+
+  app.post("/messages", async (req, res) => {
+    const sessionId = getQueryValue(req.query.sessionId);
+    const transport = sessionId ? activeSessions.get(sessionId) : undefined;
+
+    if (transport instanceof SSEServerTransport) {
+      await transport.handlePostMessage(req, res, req.body);
+    } else if (sessionId && transport) {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message: "Bad Request: Session exists but uses a different transport protocol",
+        },
+        id: null,
+      });
     } else {
       console.error(`[${sessionId}] POST Failed: Session unknown or expired.`);
       res.status(400).send("Session not found");
@@ -158,6 +295,6 @@ if (useStdio) {
 
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, "0.0.0.0", () => {
-    console.error(`Kanka MCP Server listening on port ${PORT} (SSE)`);
+    console.error(`Kanka MCP Server listening on port ${PORT} (HTTP)`);
   });
 }
