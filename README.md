@@ -4,30 +4,30 @@ Minimal Model Context Protocol (MCP) proxy for the Kanka REST API using Node.js 
 
 ## Setup
 
-1. Install dependencies:
+- Node.js 20+.
+- Install dependencies: `npm install`.
+- Provide a token via `export KANKA_API_TOKEN=your_token_here` (or edit `config.js`).
 
-```bash
-npm install
-```
+## Run modes
 
-2. Set your Kanka token in the environment:
+- STDIO (CLI/IDE): `node index.js --stdio` or `npm start -- --stdio`. This is also the default when `PORT` is unset.
+- HTTP / Streamable MCP: `PORT=5000 npm start` (defaults to `5000`). You can pass `?token=<your_token>` on the first call if you do not want to rely on the env var.
 
-```bash
-export KANKA_API_TOKEN=your_token_here
-```
+## MCP endpoints
 
-3. Start the server (defaults to port 5000):
+The server exposes MCP-compatible transports. Clients handle initialization and tool calls; no custom JSON endpoints are required.
 
-```bash
-npm start
-```
+Streamable HTTP (recommended, protocol 2025-11-25):
+- `GET /mcp?token=<token>` for the SSE stream
+- `POST /mcp` for JSON-RPC requests (include `?token=<token>` on the first initialize call if not using the env var)
+- `DELETE /mcp` to terminate a session
 
-## Available MCP-style endpoints
+Deprecated HTTP+SSE fallback (protocol 2024-11-05):
+- `GET /sse?token=<token>` to open the SSE stream
+- `POST /message?sessionId=<id>` to send JSON-RPC
+- `POST /messages?sessionId=<id>` alias for legacy clients
 
-All endpoints accept JSON payloads.
-
-- `POST /mcp/echo` — returns the received payload.
-- `POST /mcp/fetchCharacters` — body: `{ "campaignId": "<id>", "page": 1 }`.
-- `POST /mcp/fetchLocations` — body: `{ "campaignId": "<id>", "page": 1 }`.
-
-Responses mirror the Kanka REST API payloads.
+Token handling:
+- Set `KANKA_API_TOKEN` in the environment for a default token.
+- Pass `apiToken` in tool arguments for per-call tokens.
+- Supply `?token=<token>` when initiating HTTP/SSE sessions if you prefer per-session tokens.
