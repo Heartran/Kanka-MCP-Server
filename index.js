@@ -95,6 +95,7 @@ function createKankaServer(token) {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+    console.error(`[${new Date().toISOString()}] Tool Call: ${name}`, JSON.stringify(args));
     const finalToken = args?.apiToken || token || KANKA_API_TOKEN;
     if (!finalToken) throw new Error("Missing Kanka API Token.");
 
@@ -256,6 +257,10 @@ if (useStdio) {
     await serverInstance.connect(transport);
     console.error(`[${sessionId}] SSE Connected. Token: ${!!token}`);
 
+    transport.onclose = () => {
+      console.error(`[${sessionId}] Transport onclose triggered.`);
+    };
+
     res.on("close", () => {
       console.error(`[${sessionId}] SSE Closed.`);
       // Teniamo la sessione viva per un po' per permettere il completamento dei POST
@@ -269,6 +274,7 @@ if (useStdio) {
 
   app.post("/message", async (req, res) => {
     const sessionId = getQueryValue(req.query.sessionId);
+    console.error(`[${sessionId}] POST /message received. Body keys: ${Object.keys(req.body || {})}`);
     const transport = sessionId ? activeSessions.get(sessionId) : undefined;
 
     if (transport instanceof SSEServerTransport) {
