@@ -3,3 +3,6 @@ npm-debug.log*
 .env
 .DS_Store
 # Provided by (https://github.com/heartran/)[Heartran]
+error.log
+init.json
+test-sdk.js
