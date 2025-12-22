@@ -6,3 +6,4 @@ npm-debug.log*
 error.log
 init.json
 test-sdk.js
+test-list.js
