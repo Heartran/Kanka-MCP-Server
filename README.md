@@ -18,16 +18,16 @@ Minimal Model Context Protocol (MCP) proxy for the Kanka REST API using Node.js 
 The server exposes MCP-compatible transports. Clients handle initialization and tool calls; no custom JSON endpoints are required.
 
 Streamable HTTP (recommended, protocol 2025-11-25):
-- `GET /mcp?token=<token>` for the SSE stream
-- `POST /mcp` for JSON-RPC requests (include `?token=<token>` on the first initialize call if not using the env var)
+- `GET /mcp` for the SSE stream (send `Authorization: Bearer <token>` or `?token=<token>`)
+- `POST /mcp` for JSON-RPC requests (send `Authorization: Bearer <token>` or `?token=<token>` on the first initialize call if not using the env var)
 - `DELETE /mcp` to terminate a session
 
 Deprecated HTTP+SSE fallback (protocol 2024-11-05):
-- `GET /sse?token=<token>` to open the SSE stream
+- `GET /sse` to open the SSE stream (send `Authorization: Bearer <token>` or `?token=<token>`)
 - `POST /message?sessionId=<id>` to send JSON-RPC
 - `POST /messages?sessionId=<id>` alias for legacy clients
 
 Token handling:
 - Set `KANKA_API_TOKEN` in the environment for a default token.
 - Pass `apiToken` in tool arguments for per-call tokens.
-- Supply `?token=<token>` when initiating HTTP/SSE sessions if you prefer per-session tokens.
+- Supply `Authorization: Bearer <token>` (preferred) or `?token=<token>` when initiating HTTP/SSE sessions if you prefer per-session tokens.

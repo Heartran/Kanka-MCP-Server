@@ -156,6 +156,13 @@ if (useStdio) {
     return value;
   };
 
+  const getBearerToken = (req) => {
+    const headerValue = req.headers?.authorization;
+    if (!headerValue || Array.isArray(headerValue)) return "";
+    const match = headerValue.match(/^Bearer\s+(.+)$/i);
+    return match ? match[1].trim() : "";
+  };
+
   const isInitializePayload = (body) => {
     if (!body) return false;
     if (Array.isArray(body)) return body.some(item => isInitializeRequest(item));
@@ -186,7 +193,7 @@ if (useStdio) {
           return;
         }
       } else if (!sessionId && req.method === "POST" && isInitializePayload(req.body)) {
-        const token = getQueryValue(req.query.token) || "";
+        const token = getBearerToken(req) || getQueryValue(req.query.token) || "";
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (newSessionId) => {
@@ -245,7 +252,7 @@ if (useStdio) {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const token = getQueryValue(req.query.token) || "";
+    const token = getBearerToken(req) || getQueryValue(req.query.token) || "";
 
     // Usiamo un percorso relativo per l'endpoint dei messaggi
     const transport = new SSEServerTransport("/message", res);
