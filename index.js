@@ -74,8 +74,9 @@ const entities = [
 ];
 
 function createKankaServer(token) {
+  // Bump version to reflect new write capabilities (create/update/delete).
   const server = new Server(
-    { name: "kanka-mcp-server", version: "0.2.8" },
+    { name: "kanka-mcp-server", version: "0.3.0" },
     { capabilities: { tools: {} } }
   );
 
@@ -85,15 +86,80 @@ function createKankaServer(token) {
       { name: "search", description: "Search entities", inputSchema: { type: "object", properties: { campaignId: { type: "number" }, q: { type: "string" }, apiToken: { type: "string" } }, required: ["campaignId", "q"] } }
     ];
     entities.forEach(entity => {
+      // List existing entities
       tools.push({
         name: `list_${entity.plural}`,
         description: `List ${entity.plural}`,
-        inputSchema: { type: "object", properties: { campaignId: { type: "number" }, page: { type: "number" }, apiToken: { type: "string" } }, required: ["campaignId"] }
+        inputSchema: {
+          type: "object",
+          properties: {
+            campaignId: { type: "number" },
+            page: { type: "number" },
+            apiToken: { type: "string" }
+          },
+          required: ["campaignId"]
+        }
       });
+
+      // Get a single entity
       tools.push({
         name: `get_${entity.name.toLowerCase()}`,
         description: `Get details of a ${entity.name.toLowerCase()}`,
-        inputSchema: { type: "object", properties: { campaignId: { type: "number" }, id: { type: "number" }, apiToken: { type: "string" } }, required: ["campaignId", "id"] }
+        inputSchema: {
+          type: "object",
+          properties: {
+            campaignId: { type: "number" },
+            id: { type: "number" },
+            apiToken: { type: "string" }
+          },
+          required: ["campaignId", "id"]
+        }
+      });
+
+      // Create a new entity
+      tools.push({
+        name: `create_${entity.name.toLowerCase()}`,
+        description: `Create a new ${entity.name.toLowerCase()}`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            campaignId: { type: "number" },
+            data: { type: "object" },   // payload passato così com'è a Kanka
+            apiToken: { type: "string" }
+          },
+          required: ["campaignId", "data"]
+        }
+      });
+
+      // Update an existing entity
+      tools.push({
+        name: `update_${entity.name.toLowerCase()}`,
+        description: `Update an existing ${entity.name.toLowerCase()}`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            campaignId: { type: "number" },
+            id: { type: "number" },
+            data: { type: "object" },
+            apiToken: { type: "string" }
+          },
+          required: ["campaignId", "id", "data"]
+        }
+      });
+
+      // Delete an existing entity
+      tools.push({
+        name: `delete_${entity.name.toLowerCase()}`,
+        description: `Delete an existing ${entity.name.toLowerCase()}`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            campaignId: { type: "number" },
+            id: { type: "number" },
+            apiToken: { type: "string" }
+          },
+          required: ["campaignId", "id"]
+        }
       });
     });
     return { tools };
@@ -126,10 +192,73 @@ function createKankaServer(token) {
       else {
         const listMatch = name.match(/^list_(.+)$/);
         const getMatch = name.match(/^get_(.+)$/);
-        if (listMatch) response = await kankaRequest(`/campaigns/${args.campaignId}/${listMatch[1]}`, "GET", {}, { page: args.page }, finalToken);
-        else if (getMatch) {
+        const createMatch = name.match(/^create_(.+)$/);
+        const updateMatch = name.match(/^update_(.+)$/);
+        const deleteMatch = name.match(/^delete_(.+)$/);
+
+        if (listMatch) {
+          // List entities (GET /campaigns/{campaignId}/{plural})
+          response = await kankaRequest(
+            `/campaigns/${args.campaignId}/${listMatch[1]}`,
+            "GET",
+            {},
+            { page: args.page },
+            finalToken
+          );
+        } else if (getMatch) {
+          // Get single entity (GET /campaigns/{campaignId}/{plural}/{id})
           const entity = entities.find(e => e.name.toLowerCase() === getMatch[1]);
-          if (entity) response = await kankaRequest(`/campaigns/${args.campaignId}/${entity.plural}/${args.id}`, "GET", {}, {}, finalToken);
+          if (entity) {
+            response = await kankaRequest(
+              `/campaigns/${args.campaignId}/${entity.plural}/${args.id}`,
+              "GET",
+              {},
+              {},
+              finalToken
+            );
+          }
+        } else if (createMatch) {
+          // Create a new entity (POST /campaigns/{campaignId}/{plural})
+          const entity = entities.find(e => e.name.toLowerCase() === createMatch[1]);
+          if (!args?.data || typeof args.data !== "object") {
+            throw new Error("Missing or invalid 'data' for create request.");
+          }
+          if (entity) {
+            response = await kankaRequest(
+              `/campaigns/${args.campaignId}/${entity.plural}`,
+              "POST",
+              args.data,
+              {},
+              finalToken
+            );
+          }
+        } else if (updateMatch) {
+          // Update an existing entity (PUT /campaigns/{campaignId}/{plural}/{id})
+          const entity = entities.find(e => e.name.toLowerCase() === updateMatch[1]);
+          if (!args?.data || typeof args.data !== "object") {
+            throw new Error("Missing or invalid 'data' for update request.");
+          }
+          if (entity) {
+            response = await kankaRequest(
+              `/campaigns/${args.campaignId}/${entity.plural}/${args.id}`,
+              "PUT",
+              args.data,
+              {},
+              finalToken
+            );
+          }
+        } else if (deleteMatch) {
+          // Delete an existing entity (DELETE /campaigns/{campaignId}/{plural}/{id})
+          const entity = entities.find(e => e.name.toLowerCase() === deleteMatch[1]);
+          if (entity) {
+            response = await kankaRequest(
+              `/campaigns/${args.campaignId}/${entity.plural}/${args.id}`,
+              "DELETE",
+              {},
+              {},
+              finalToken
+            );
+          }
         }
       }
       return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
