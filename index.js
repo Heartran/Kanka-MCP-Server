@@ -101,8 +101,22 @@ function createKankaServer(token) {
 
     try {
       let response;
-      if (name === "list_campaigns") response = await kankaRequest("/campaigns", "GET", {}, {}, finalToken);
-      else if (name === "search") response = await kankaRequest(`/campaigns/${args.campaignId}/search`, "GET", {}, { q: args.q }, finalToken);
+      if (name === "list_campaigns") {
+        response = await kankaRequest("/campaigns", "GET", {}, {}, finalToken);
+      } else if (name === "search") {
+        // Kanka search endpoint (per docs): search/{search_term}, optionally namespaced by campaign.
+        const term = encodeURIComponent(args.q);
+        try {
+          response = await kankaRequest(`/campaigns/${args.campaignId}/search/${term}`, "GET", {}, {}, finalToken);
+        } catch (err) {
+          const status = err.response?.status;
+          if (status === 404) {
+            response = await kankaRequest(`/search/${term}`, "GET", {}, { campaign_id: args.campaignId }, finalToken);
+          } else {
+            throw err;
+          }
+        }
+      }
       else {
         const listMatch = name.match(/^list_(.+)$/);
         const getMatch = name.match(/^get_(.+)$/);
