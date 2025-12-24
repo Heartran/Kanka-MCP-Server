@@ -1,7 +1,13 @@
 import express from "express";
 import axios from "axios";
 import cors from "cors";
-import { KANKA_API_BASE, KANKA_API_TOKEN } from "./config.js";
+import {
+  KANKA_API_BASE,
+  KANKA_API_TOKEN,
+  KANKA_CLIENT_ID,
+  KANKA_CLIENT_SECRET,
+  KANKA_REDIRECT_URI,
+} from "./config.js";
 import { randomUUID } from "node:crypto";
 
 const sdk = await loadSdk();
@@ -161,6 +167,65 @@ if (useStdio) {
       });
     }
     next(err);
+  });
+
+  app.get("/oauth/login", (req, res) => {
+    if (!KANKA_CLIENT_ID || !KANKA_REDIRECT_URI) {
+      return res.status(500).json({ error: "OAuth client not configured" });
+    }
+
+    const params = new URLSearchParams({
+      client_id: KANKA_CLIENT_ID,
+      redirect_uri: KANKA_REDIRECT_URI,
+      response_type: "code",
+    });
+
+    res.redirect(`https://kanka.io/oauth/authorize?${params.toString()}`);
+  });
+
+  app.get("/oauth/callback", async (req, res) => {
+    const code = req.query.code;
+
+    if (!code) {
+      return res.status(400).json({ error: "Missing code parameter" });
+    }
+
+    if (!KANKA_CLIENT_ID || !KANKA_CLIENT_SECRET || !KANKA_REDIRECT_URI) {
+      return res.status(500).json({ error: "OAuth client not configured" });
+    }
+
+    try {
+      const tokenResponse = await axios.post(
+        "https://kanka.io/oauth/token",
+        new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: KANKA_CLIENT_ID,
+          client_secret: KANKA_CLIENT_SECRET,
+          redirect_uri: KANKA_REDIRECT_URI,
+          code: String(code),
+        }),
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        }
+      );
+
+      const data = tokenResponse.data;
+
+      res.json({
+        token_type: data.token_type,
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_in: data.expires_in,
+      });
+    } catch (error) {
+      console.error("OAuth callback error:", error.response?.data || error.message);
+      res.status(500).json({
+        error: "Token exchange failed",
+        details: error.response?.data || null,
+      });
+    }
   });
 
   const activeSessions = new Map();
