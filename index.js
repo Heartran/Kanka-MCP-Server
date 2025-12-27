@@ -282,7 +282,108 @@ if (useStdio) {
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+  const handleMcpRequest = async (req, res) => {
+    try {
+      const sessionIdHeader = req.headers["mcp-session-id"];
+      const sessionId = Array.isArray(sessionIdHeader)
+        ? sessionIdHeader[0]
+        : sessionIdHeader;
+      let transport;
+
+      if (sessionId && activeSessions.has(sessionId)) {
+        const existingTransport = activeSessions.get(sessionId);
+        if (existingTransport instanceof StreamableHTTPServerTransport) {
+          transport = existingTransport;
+        } else {
+          res.status(400).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message: "Bad Request: Session exists but uses a different transport protocol",
+            },
+            id: null,
+          });
+          return;
+        }
+      } else if (req.method === "GET") {
+        const token = getBearerToken(req) || getQueryValue(req.query.token) || "";
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (newSessionId) => {
+            activeSessions.set(newSessionId, transport);
+          },
+          onsessionclosed: (closedSessionId) => {
+            if (activeSessions.get(closedSessionId) === transport) {
+              activeSessions.delete(closedSessionId);
+            }
+          },
+        });
+
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid && activeSessions.get(sid) === transport) {
+            activeSessions.delete(sid);
+          }
+        };
+
+        const serverInstance = createKankaServer(token);
+        await serverInstance.connect(transport);
+      } else if (!sessionId && req.method === "POST" && isInitializePayload(req.body)) {
+        const token = getBearerToken(req) || getQueryValue(req.query.token) || "";
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (newSessionId) => {
+            activeSessions.set(newSessionId, transport);
+          },
+          onsessionclosed: (closedSessionId) => {
+            if (activeSessions.get(closedSessionId) === transport) {
+              activeSessions.delete(closedSessionId);
+            }
+          },
+        });
+
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid && activeSessions.get(sid) === transport) {
+            activeSessions.delete(sid);
+          }
+        };
+
+        const serverInstance = createKankaServer(token);
+        await serverInstance.connect(transport);
+      } else {
+        res.status(400).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: "Bad Request: No valid session ID provided",
+          },
+          id: null,
+        });
+        return;
+      }
+
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error("Error handling MCP request:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32603,
+            message: "Internal server error",
+          },
+          id: null,
+        });
+      }
+    }
+  };
+
   app.get("/", (req, res) => {
+    const accept = req.headers?.accept || "";
+    if (typeof accept === "string" && accept.includes("text/event-stream")) {
+      return handleMcpRequest(req, res);
+    }
     res.json({ status: "ok" });
   });
   // Custom error handler for JSON syntax errors
@@ -575,79 +676,7 @@ if (useStdio) {
     return isInitializeRequest(body);
   };
 
-  app.all("/mcp", async (req, res) => {
-    try {
-      const sessionIdHeader = req.headers["mcp-session-id"];
-      const sessionId = Array.isArray(sessionIdHeader)
-        ? sessionIdHeader[0]
-        : sessionIdHeader;
-      let transport;
-
-      if (sessionId && activeSessions.has(sessionId)) {
-        const existingTransport = activeSessions.get(sessionId);
-        if (existingTransport instanceof StreamableHTTPServerTransport) {
-          transport = existingTransport;
-        } else {
-          res.status(400).json({
-            jsonrpc: "2.0",
-            error: {
-              code: -32000,
-              message: "Bad Request: Session exists but uses a different transport protocol",
-            },
-            id: null,
-          });
-          return;
-        }
-      } else if (!sessionId && req.method === "POST" && isInitializePayload(req.body)) {
-        const token = getBearerToken(req) || getQueryValue(req.query.token) || "";
-        transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (newSessionId) => {
-            activeSessions.set(newSessionId, transport);
-          },
-          onsessionclosed: (closedSessionId) => {
-            if (activeSessions.get(closedSessionId) === transport) {
-              activeSessions.delete(closedSessionId);
-            }
-          },
-        });
-
-        transport.onclose = () => {
-          const sid = transport.sessionId;
-          if (sid && activeSessions.get(sid) === transport) {
-            activeSessions.delete(sid);
-          }
-        };
-
-        const serverInstance = createKankaServer(token);
-        await serverInstance.connect(transport);
-      } else {
-        res.status(400).json({
-          jsonrpc: "2.0",
-          error: {
-            code: -32000,
-            message: "Bad Request: No valid session ID provided",
-          },
-          id: null,
-        });
-        return;
-      }
-
-      await transport.handleRequest(req, res, req.body);
-    } catch (error) {
-      console.error("Error handling MCP request:", error);
-      if (!res.headersSent) {
-        res.status(500).json({
-          jsonrpc: "2.0",
-          error: {
-            code: -32603,
-            message: "Internal server error",
-          },
-          id: null,
-        });
-      }
-    }
-  });
+  app.all("/mcp", handleMcpRequest);
 
   app.get("/sse", async (req, res) => {
     console.error(`[${new Date().toISOString()}] SSE Attempt...`);

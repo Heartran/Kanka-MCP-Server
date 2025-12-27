@@ -28,7 +28,7 @@ You can also override Kanka OAuth settings per request by passing `kanka_client_
 The server exposes MCP-compatible transports. Clients handle initialization and tool calls; no custom JSON endpoints are required.
 
 Streamable HTTP (recommended, protocol 2025-11-25):
-- `GET /mcp` for the SSE stream (send `Authorization: Bearer <token>` or `?token=<token>`)
+- `GET /mcp` (or `/` when the client expects an SSE stream) for the SSE stream (send `Authorization: Bearer <token>` or `?token=<token>`)
 - `POST /mcp` for JSON-RPC requests (send `Authorization: Bearer <token>` or `?token=<token>` on the first initialize call if not using the env var)
 - `DELETE /mcp` to terminate a session
 
