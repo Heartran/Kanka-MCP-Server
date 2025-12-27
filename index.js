@@ -439,8 +439,12 @@ if (useStdio) {
       || KANKA_REDIRECT_URI
       || fallback.redirectUri
       || `${getBaseUrl(req)}/oauth/callback`;
+    const scope = getReqValue(req.query?.scope)
+      || req.body?.scope
+      || fallback.scope
+      || "read write";
 
-    return { clientId, clientSecret, redirectUri };
+    return { clientId, clientSecret, redirectUri, scope };
   };
 
   app.get("/.well-known/oauth-authorization-server", (req, res) => {
@@ -451,6 +455,7 @@ if (useStdio) {
       token_endpoint: `${baseUrl}/oauth/token`,
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
+      scopes_supported: ["read", "write"],
       code_challenge_methods_supported: ["S256", "plain"],
       token_endpoint_auth_methods_supported: ["none"],
     });
@@ -493,6 +498,9 @@ if (useStdio) {
       response_type: "code",
       state: requestId,
     });
+    if (kankaConfig.scope) {
+      params.set("scope", kankaConfig.scope);
+    }
 
     res.redirect(`https://app.kanka.io/oauth/authorize?${params.toString()}`);
   });
@@ -508,6 +516,9 @@ if (useStdio) {
       redirect_uri: kankaConfig.redirectUri,
       response_type: "code",
     });
+    if (kankaConfig.scope) {
+      params.set("scope", kankaConfig.scope);
+    }
 
     res.redirect(`https://app.kanka.io/oauth/authorize?${params.toString()}`);
   });
@@ -541,6 +552,7 @@ if (useStdio) {
           client_secret: kankaConfig.clientSecret,
           redirect_uri: kankaConfig.redirectUri,
           code: String(code),
+          scope: kankaConfig.scope,
         }),
         {
           headers: {
@@ -629,6 +641,7 @@ if (useStdio) {
             client_id: kankaConfig.clientId,
             client_secret: kankaConfig.clientSecret,
             refresh_token: refreshToken,
+            scope: kankaConfig.scope,
           }),
           {
             headers: {
