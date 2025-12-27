@@ -390,7 +390,7 @@ if (useStdio) {
       state: requestId,
     });
 
-    res.redirect(`https://kanka.io/oauth/authorize?${params.toString()}`);
+    res.redirect(`https://app.kanka.io/oauth/authorize?${params.toString()}`);
   });
 
   app.get("/oauth/login", (req, res) => {
@@ -405,7 +405,7 @@ if (useStdio) {
       response_type: "code",
     });
 
-    res.redirect(`https://kanka.io/oauth/authorize?${params.toString()}`);
+    res.redirect(`https://app.kanka.io/oauth/authorize?${params.toString()}`);
   });
 
   app.get("/oauth/callback", async (req, res) => {
@@ -430,7 +430,7 @@ if (useStdio) {
       }
 
       const tokenResponse = await axios.post(
-        "https://kanka.io/oauth/token",
+        "https://app.kanka.io/oauth/token",
         new URLSearchParams({
           grant_type: "authorization_code",
           client_id: kankaConfig.clientId,
@@ -519,7 +519,7 @@ if (useStdio) {
 
       try {
         const tokenResponse = await axios.post(
-          "https://kanka.io/oauth/token",
+          "https://app.kanka.io/oauth/token",
           new URLSearchParams({
             grant_type: "refresh_token",
             client_id: kankaConfig.clientId,
