@@ -282,6 +282,9 @@ if (useStdio) {
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+  app.get("/", (req, res) => {
+    res.json({ status: "ok" });
+  });
   // Custom error handler for JSON syntax errors
   app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
