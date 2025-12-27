@@ -8,7 +8,7 @@ import {
   KANKA_CLIENT_SECRET,
   KANKA_REDIRECT_URI,
 } from "./config.js";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 const sdk = await loadSdk();
 
@@ -281,6 +281,7 @@ if (useStdio) {
   app.set('trust proxy', true); // Fondamentale per Tailscale Funnel
   app.use(cors());
   app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
   // Custom error handler for JSON syntax errors
   app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
@@ -296,6 +297,74 @@ if (useStdio) {
       });
     }
     next(err);
+  });
+
+  const oauthAuthRequests = new Map();
+  const oauthAuthCodes = new Map();
+
+  const base64Url = (buffer) => buffer.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  const sha256 = (value) => createHash("sha256").update(value).digest();
+  const verifyPkce = (codeVerifier, codeChallenge, method) => {
+    if (!codeChallenge) return true;
+    if (!codeVerifier) return false;
+    if (!method || method === "plain") return codeVerifier === codeChallenge;
+    if (method === "S256") return base64Url(sha256(codeVerifier)) === codeChallenge;
+    return false;
+  };
+
+  const requireOAuthConfig = (res) => {
+    if (!KANKA_CLIENT_ID || !KANKA_CLIENT_SECRET || !KANKA_REDIRECT_URI) {
+      res.status(500).json({ error: "OAuth client not configured" });
+      return false;
+    }
+    return true;
+  };
+
+  app.get("/.well-known/oauth-authorization-server", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    res.json({
+      issuer: baseUrl,
+      authorization_endpoint: `${baseUrl}/oauth/authorize`,
+      token_endpoint: `${baseUrl}/oauth/token`,
+      response_types_supported: ["code"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      code_challenge_methods_supported: ["S256", "plain"],
+      token_endpoint_auth_methods_supported: ["none"],
+    });
+  });
+
+  app.get("/oauth/authorize", (req, res) => {
+    if (!requireOAuthConfig(res)) return;
+    const {
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      state,
+      response_type: responseType,
+      code_challenge: codeChallenge,
+      code_challenge_method: codeChallengeMethod,
+    } = req.query;
+
+    if (responseType !== "code" || !clientId || !redirectUri) {
+      return res.status(400).json({ error: "Invalid OAuth authorization request" });
+    }
+
+    const requestId = randomUUID();
+    oauthAuthRequests.set(requestId, {
+      clientId,
+      redirectUri,
+      state,
+      codeChallenge,
+      codeChallengeMethod,
+    });
+
+    const params = new URLSearchParams({
+      client_id: KANKA_CLIENT_ID,
+      redirect_uri: KANKA_REDIRECT_URI,
+      response_type: "code",
+      state: requestId,
+    });
+
+    res.redirect(`https://kanka.io/oauth/authorize?${params.toString()}`);
   });
 
   app.get("/oauth/login", (req, res) => {
@@ -314,14 +383,13 @@ if (useStdio) {
 
   app.get("/oauth/callback", async (req, res) => {
     const code = req.query.code;
+    const state = req.query.state;
 
     if (!code) {
       return res.status(400).json({ error: "Missing code parameter" });
     }
 
-    if (!KANKA_CLIENT_ID || !KANKA_CLIENT_SECRET || !KANKA_REDIRECT_URI) {
-      return res.status(500).json({ error: "OAuth client not configured" });
-    }
+    if (!requireOAuthConfig(res)) return;
 
     try {
       const tokenResponse = await axios.post(
@@ -342,6 +410,27 @@ if (useStdio) {
 
       const data = tokenResponse.data;
 
+      const requestId = typeof state === "string" ? state : "";
+      const request = requestId ? oauthAuthRequests.get(requestId) : null;
+      if (request) {
+        oauthAuthRequests.delete(requestId);
+        const authCode = randomUUID();
+        oauthAuthCodes.set(authCode, {
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
+          expiresIn: data.expires_in,
+          codeChallenge: request.codeChallenge,
+          codeChallengeMethod: request.codeChallengeMethod,
+        });
+
+        const redirectParams = new URLSearchParams({
+          code: authCode,
+          state: request.state || "",
+        });
+        const redirectUrl = `${request.redirectUri}?${redirectParams.toString()}`;
+        return res.redirect(redirectUrl);
+      }
+
       res.json({
         token_type: data.token_type,
         access_token: data.access_token,
@@ -355,6 +444,74 @@ if (useStdio) {
         details: error.response?.data || null,
       });
     }
+  });
+
+  app.post("/oauth/token", async (req, res) => {
+    if (!requireOAuthConfig(res)) return;
+    const grantType = req.body?.grant_type;
+
+    if (grantType === "authorization_code") {
+      const code = req.body?.code;
+      const codeVerifier = req.body?.code_verifier;
+      if (!code || typeof code !== "string") {
+        return res.status(400).json({ error: "Missing code" });
+      }
+      const payload = oauthAuthCodes.get(code);
+      if (!payload) {
+        return res.status(400).json({ error: "Invalid or expired code" });
+      }
+      if (!verifyPkce(codeVerifier, payload.codeChallenge, payload.codeChallengeMethod)) {
+        return res.status(400).json({ error: "Invalid code_verifier" });
+      }
+
+      oauthAuthCodes.delete(code);
+      return res.json({
+        token_type: "Bearer",
+        access_token: payload.accessToken,
+        refresh_token: payload.refreshToken,
+        expires_in: payload.expiresIn,
+      });
+    }
+
+    if (grantType === "refresh_token") {
+      const refreshToken = req.body?.refresh_token;
+      if (!refreshToken || typeof refreshToken !== "string") {
+        return res.status(400).json({ error: "Missing refresh_token" });
+      }
+
+      try {
+        const tokenResponse = await axios.post(
+          "https://kanka.io/oauth/token",
+          new URLSearchParams({
+            grant_type: "refresh_token",
+            client_id: KANKA_CLIENT_ID,
+            client_secret: KANKA_CLIENT_SECRET,
+            refresh_token: refreshToken,
+          }),
+          {
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+          }
+        );
+
+        const data = tokenResponse.data;
+        return res.json({
+          token_type: data.token_type,
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+          expires_in: data.expires_in,
+        });
+      } catch (error) {
+        console.error("OAuth refresh error:", error.response?.data || error.message);
+        return res.status(500).json({
+          error: "Token refresh failed",
+          details: error.response?.data || null,
+        });
+      }
+    }
+
+    return res.status(400).json({ error: "Unsupported grant_type" });
   });
 
   const activeSessions = new Map();
