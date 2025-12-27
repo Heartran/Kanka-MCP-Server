@@ -312,12 +312,31 @@ if (useStdio) {
     return false;
   };
 
-  const requireOAuthConfig = (res) => {
-    if (!KANKA_CLIENT_ID || !KANKA_CLIENT_SECRET || !KANKA_REDIRECT_URI) {
-      res.status(500).json({ error: "OAuth client not configured" });
-      return false;
-    }
-    return true;
+  const getReqValue = (value) => {
+    if (Array.isArray(value)) return value[0];
+    return value;
+  };
+
+  const getBaseUrl = (req) => `${req.protocol}://${req.get("host")}`;
+
+  const resolveKankaConfig = (req, fallback = {}) => {
+    const clientId = getReqValue(req.query?.kanka_client_id)
+      || req.body?.kanka_client_id
+      || KANKA_CLIENT_ID
+      || getReqValue(req.query?.client_id)
+      || req.body?.client_id
+      || fallback.clientId;
+    const clientSecret = getReqValue(req.query?.kanka_client_secret)
+      || req.body?.kanka_client_secret
+      || KANKA_CLIENT_SECRET
+      || fallback.clientSecret;
+    const redirectUri = getReqValue(req.query?.kanka_redirect_uri)
+      || req.body?.kanka_redirect_uri
+      || KANKA_REDIRECT_URI
+      || fallback.redirectUri
+      || `${getBaseUrl(req)}/oauth/callback`;
+
+    return { clientId, clientSecret, redirectUri };
   };
 
   app.get("/.well-known/oauth-authorization-server", (req, res) => {
@@ -334,7 +353,6 @@ if (useStdio) {
   });
 
   app.get("/oauth/authorize", (req, res) => {
-    if (!requireOAuthConfig(res)) return;
     const {
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -349,17 +367,25 @@ if (useStdio) {
     }
 
     const requestId = randomUUID();
+    const kankaConfig = resolveKankaConfig(req);
+    if (!kankaConfig.clientId || !kankaConfig.redirectUri) {
+      return res.status(500).json({ error: "OAuth client not configured" });
+    }
+
     oauthAuthRequests.set(requestId, {
       clientId,
       redirectUri,
       state,
       codeChallenge,
       codeChallengeMethod,
+      kankaClientId: kankaConfig.clientId,
+      kankaClientSecret: kankaConfig.clientSecret,
+      kankaRedirectUri: kankaConfig.redirectUri,
     });
 
     const params = new URLSearchParams({
-      client_id: KANKA_CLIENT_ID,
-      redirect_uri: KANKA_REDIRECT_URI,
+      client_id: kankaConfig.clientId,
+      redirect_uri: kankaConfig.redirectUri,
       response_type: "code",
       state: requestId,
     });
@@ -368,13 +394,14 @@ if (useStdio) {
   });
 
   app.get("/oauth/login", (req, res) => {
-    if (!KANKA_CLIENT_ID || !KANKA_REDIRECT_URI) {
+    const kankaConfig = resolveKankaConfig(req);
+    if (!kankaConfig.clientId || !kankaConfig.redirectUri) {
       return res.status(500).json({ error: "OAuth client not configured" });
     }
 
     const params = new URLSearchParams({
-      client_id: KANKA_CLIENT_ID,
-      redirect_uri: KANKA_REDIRECT_URI,
+      client_id: kankaConfig.clientId,
+      redirect_uri: kankaConfig.redirectUri,
       response_type: "code",
     });
 
@@ -389,16 +416,26 @@ if (useStdio) {
       return res.status(400).json({ error: "Missing code parameter" });
     }
 
-    if (!requireOAuthConfig(res)) return;
-
     try {
+      const requestId = typeof state === "string" ? state : "";
+      const request = requestId ? oauthAuthRequests.get(requestId) : null;
+      const kankaConfig = resolveKankaConfig(req, {
+        clientId: request?.kankaClientId,
+        clientSecret: request?.kankaClientSecret,
+        redirectUri: request?.kankaRedirectUri,
+      });
+
+      if (!kankaConfig.clientId || !kankaConfig.clientSecret || !kankaConfig.redirectUri) {
+        return res.status(500).json({ error: "OAuth client not configured" });
+      }
+
       const tokenResponse = await axios.post(
         "https://kanka.io/oauth/token",
         new URLSearchParams({
           grant_type: "authorization_code",
-          client_id: KANKA_CLIENT_ID,
-          client_secret: KANKA_CLIENT_SECRET,
-          redirect_uri: KANKA_REDIRECT_URI,
+          client_id: kankaConfig.clientId,
+          client_secret: kankaConfig.clientSecret,
+          redirect_uri: kankaConfig.redirectUri,
           code: String(code),
         }),
         {
@@ -410,8 +447,6 @@ if (useStdio) {
 
       const data = tokenResponse.data;
 
-      const requestId = typeof state === "string" ? state : "";
-      const request = requestId ? oauthAuthRequests.get(requestId) : null;
       if (request) {
         oauthAuthRequests.delete(requestId);
         const authCode = randomUUID();
@@ -447,8 +482,8 @@ if (useStdio) {
   });
 
   app.post("/oauth/token", async (req, res) => {
-    if (!requireOAuthConfig(res)) return;
     const grantType = req.body?.grant_type;
+    const kankaConfig = resolveKankaConfig(req);
 
     if (grantType === "authorization_code") {
       const code = req.body?.code;
@@ -478,14 +513,17 @@ if (useStdio) {
       if (!refreshToken || typeof refreshToken !== "string") {
         return res.status(400).json({ error: "Missing refresh_token" });
       }
+      if (!kankaConfig.clientId || !kankaConfig.clientSecret) {
+        return res.status(500).json({ error: "OAuth client not configured" });
+      }
 
       try {
         const tokenResponse = await axios.post(
           "https://kanka.io/oauth/token",
           new URLSearchParams({
             grant_type: "refresh_token",
-            client_id: KANKA_CLIENT_ID,
-            client_secret: KANKA_CLIENT_SECRET,
+            client_id: kankaConfig.clientId,
+            client_secret: kankaConfig.clientSecret,
             refresh_token: refreshToken,
           }),
           {

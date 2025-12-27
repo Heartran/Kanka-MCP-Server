@@ -21,6 +21,8 @@ Minimal Model Context Protocol (MCP) proxy for the Kanka REST API using Node.js 
 - `GET /oauth/authorize`: starts OAuth flow (proxying through Kanka).
 - `POST /oauth/token`: exchanges authorization codes (and refresh tokens) for access tokens.
 
+You can also override Kanka OAuth settings per request by passing `kanka_client_id`, `kanka_client_secret`, and/or `kanka_redirect_uri` as query parameters (authorize/login) or form fields (token).
+
 ## MCP endpoints
 
 The server exposes MCP-compatible transports. Clients handle initialization and tool calls; no custom JSON endpoints are required.
