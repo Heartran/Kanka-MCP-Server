@@ -442,7 +442,7 @@ if (useStdio) {
     const scope = getReqValue(req.query?.scope)
       || req.body?.scope
       || fallback.scope
-      || "read write";
+      || "";
 
     return { clientId, clientSecret, redirectUri, scope };
   };
@@ -455,7 +455,7 @@ if (useStdio) {
       token_endpoint: `${baseUrl}/oauth/token`,
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
-      scopes_supported: ["read", "write"],
+      scopes_supported: [],
       code_challenge_methods_supported: ["S256", "plain"],
       token_endpoint_auth_methods_supported: ["none"],
     });
@@ -526,6 +526,15 @@ if (useStdio) {
   app.get("/oauth/callback", async (req, res) => {
     const code = req.query.code;
     const state = req.query.state;
+    const errorParam = req.query.error;
+    const errorDescription = req.query.error_description;
+
+    if (errorParam) {
+      return res.status(400).json({
+        error: String(errorParam),
+        error_description: errorDescription ? String(errorDescription) : undefined,
+      });
+    }
 
     if (!code) {
       return res.status(400).json({ error: "Missing code parameter" });
@@ -552,7 +561,7 @@ if (useStdio) {
           client_secret: kankaConfig.clientSecret,
           redirect_uri: kankaConfig.redirectUri,
           code: String(code),
-          scope: kankaConfig.scope,
+          ...(kankaConfig.scope ? { scope: kankaConfig.scope } : {}),
         }),
         {
           headers: {
@@ -641,7 +650,7 @@ if (useStdio) {
             client_id: kankaConfig.clientId,
             client_secret: kankaConfig.clientSecret,
             refresh_token: refreshToken,
-            scope: kankaConfig.scope,
+            ...(kankaConfig.scope ? { scope: kankaConfig.scope } : {}),
           }),
           {
             headers: {
