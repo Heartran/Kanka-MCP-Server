@@ -39,5 +39,4 @@ Deprecated HTTP+SSE fallback (protocol 2024-11-05):
 
 Token handling:
 - Set `KANKA_API_TOKEN` in the environment for a default token.
-- Pass `apiToken` in tool arguments for per-call tokens.
 - Supply `Authorization: Bearer <token>` (preferred) or `?token=<token>` when initiating HTTP/SSE sessions if you prefer per-session tokens.
