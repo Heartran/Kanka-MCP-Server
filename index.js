@@ -76,14 +76,14 @@ const entities = [
 function createKankaServer(token) {
   // Bump version to reflect new write capabilities (create/update/delete).
   const server = new Server(
-    { name: "kanka-mcp-server", version: "0.3.0" },
+    { name: "kanka-mcp-server", version: "0.4.0" },
     { capabilities: { tools: {} } }
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools = [
-      { name: "list_campaigns", description: "List all campaigns", inputSchema: { type: "object", properties: { apiToken: { type: "string" } } } },
-      { name: "search", description: "Search entities", inputSchema: { type: "object", properties: { campaignId: { type: "number" }, q: { type: "string" }, apiToken: { type: "string" } }, required: ["campaignId", "q"] } }
+      { name: "list_campaigns", description: "List all campaigns", inputSchema: { type: "object", properties: {} } },
+      { name: "search", description: "Search entities", inputSchema: { type: "object", properties: { campaignId: { type: "number" }, q: { type: "string" } }, required: ["campaignId", "q"] } }
     ];
     entities.forEach(entity => {
       // List existing entities
@@ -94,8 +94,7 @@ function createKankaServer(token) {
           type: "object",
           properties: {
             campaignId: { type: "number" },
-            page: { type: "number" },
-            apiToken: { type: "string" }
+            page: { type: "number" }
           },
           required: ["campaignId"]
         }
@@ -109,8 +108,7 @@ function createKankaServer(token) {
           type: "object",
           properties: {
             campaignId: { type: "number" },
-            id: { type: "number" },
-            apiToken: { type: "string" }
+            id: { type: "number" }
           },
           required: ["campaignId", "id"]
         }
@@ -124,8 +122,7 @@ function createKankaServer(token) {
           type: "object",
           properties: {
             campaignId: { type: "number" },
-            data: { type: "object" },   // payload passato così com'è a Kanka
-            apiToken: { type: "string" }
+            data: { type: "object" }   // payload passato così com'è a Kanka
           },
           required: ["campaignId", "data"]
         }
@@ -140,8 +137,7 @@ function createKankaServer(token) {
           properties: {
             campaignId: { type: "number" },
             id: { type: "number" },
-            data: { type: "object" },
-            apiToken: { type: "string" }
+            data: { type: "object" }
           },
           required: ["campaignId", "id", "data"]
         }
@@ -155,8 +151,7 @@ function createKankaServer(token) {
           type: "object",
           properties: {
             campaignId: { type: "number" },
-            id: { type: "number" },
-            apiToken: { type: "string" }
+            id: { type: "number" }
           },
           required: ["campaignId", "id"]
         }
@@ -168,7 +163,7 @@ function createKankaServer(token) {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     console.error(`[${new Date().toISOString()}] Tool Call: ${name}`, JSON.stringify(args));
-    const finalToken = args?.apiToken || token || KANKA_API_TOKEN;
+    const finalToken = token || KANKA_API_TOKEN;
     if (!finalToken) throw new Error("Missing Kanka API Token.");
 
     try {
