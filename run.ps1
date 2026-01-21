@@ -1,6 +1,7 @@
 cd C:\Users\Federico\repo\Kanka-MCP-Server
 
 function Start-Server {
+  git fetch
   git pull
   npm install
   tailscale funnel 5000
