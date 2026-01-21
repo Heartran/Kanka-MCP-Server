@@ -1,5 +1,7 @@
 # Repository Guidelines
 
+Agent Template Developed by [Heartran](https://github.com/heartran/)
+
 - `index.js`: Main entry point for the MCP proxy server.
 - `config.js`: Configuration for API tokens and base URLs.
 - `package.json`: Project metadata and dependencies (Node.js/Express).
@@ -35,9 +37,8 @@
 - Every agent should have his own git identity when committing changes in order to have a more clear and readable history
 
 | Agent | GIT_COMMITTER_NAME / GIT_AUTHOR_NAME | GIT_COMMITTER_EMAIL / GIT_AUTHOR_EMAIL |
-|-------|:--------------------------------------:|----------------------------------------|
-| Codex | Codex                                | codex@users.noreply.github.com         |
-| Gemini | Gemini | gemini-code-assist@users.noreply.github.com |
-
-
-# Agent Template Developed by Heartran (https://github.com/heartran/)
+| --- | :---: | --- |
+| Codex | Codex | [codex@users.noreply.github.com](mailto:codex@users.noreply.github.com) |
+| Gemini | Gemini | [gemini-code-assist@users.noreply.github.com](mailto:gemini-code-assist@users.noreply.github.com) |
+| Cascade | Cascade | [cascade@users.noreply.github.com](mailto:cascade@users.noreply.github.com) |
+| GitHub Copilot | GitHub Copilot | [github-copilot@users.noreply.github.com](mailto:github-copilot@users.noreply.github.com) |
