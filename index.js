@@ -339,85 +339,96 @@ if (useStdio) {
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
   
-  // Middleware di logging verboso per tutte le richieste
+  // Middleware di logging intelligente (solo errori e richieste importanti)
   app.use((req, res, next) => {
     const timestamp = new Date().toISOString();
     const clientIP = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || 'unknown';
-    const userAgent = req.headers['user-agent'] || 'unknown';
-    const referer = req.headers['referer'] || 'direct';
-    const xForwardedFor = req.headers['x-forwarded-for'] || 'none';
-    const xRealIP = req.headers['x-real-ip'] || 'none';
-    const sessionId = req.headers['mcp-session-id'] || 'none';
-    const contentType = req.headers['content-type'] || 'none';
-    const contentLength = req.headers['content-length'] || '0';
     
-    console.error(`[${timestamp}] 🌐 INCOMING REQUEST:`);
-    console.error(`  📍 Method: ${req.method}`);
-    console.error(`  🔗 URL: ${req.protocol}://${req.get('host')}${req.originalUrl}`);
-    console.error(`  🌍 Client IP: ${clientIP}`);
-    console.error(`  🔄 X-Forwarded-For: ${xForwardedFor}`);
-    console.error(`  🎯 X-Real-IP: ${xRealIP}`);
-    console.error(`  🖥️  User-Agent: ${userAgent}`);
-    console.error(`  🔙 Referer: ${referer}`);
-    console.error(`  🆔 Session ID: ${sessionId}`);
-    console.error(`  📄 Content-Type: ${contentType}`);
-    console.error(`  📏 Content-Length: ${contentLength}`);
+    // Log solo per richieste importanti o con errori
+    const shouldLog = req.path === '/health' || 
+                      req.path.startsWith('/oauth') || 
+                      req.path.startsWith('/sse') ||
+                      req.method !== 'GET' ||
+                      req.headers['user-agent']?.includes('curl') ||
+                      req.headers['user-agent']?.includes('wget');
     
-    // Log headers completi
-    console.error(`  📋 Headers: ${JSON.stringify(req.headers, null, 2)}`);
-    
-    // Log query parameters
-    if (Object.keys(req.query).length > 0) {
-      console.error(`  ❓ Query Params: ${JSON.stringify(req.query, null, 2)}`);
-    } else {
-      console.error(`  ❓ Query Params: none`);
-    }
-    
-    // Log body (solo se non è troppo grande)
-    if (req.body && Object.keys(req.body).length > 0) {
-      const bodySize = JSON.stringify(req.body).length;
-      if (bodySize > 1000) {
-        console.error(`  📦 Body: ${bodySize} bytes (too large to display)`);
-      } else {
-        console.error(`  📦 Body: ${JSON.stringify(req.body, null, 2)}`);
+    if (shouldLog) {
+      console.error(`[${timestamp}] 📋 REQUEST: ${req.method} ${req.originalUrl} from ${clientIP}`);
+      
+      // Log headers solo per richieste importanti
+      if (req.path.startsWith('/oauth') || req.path.startsWith('/sse')) {
+        console.error(`  Headers: ${JSON.stringify(req.headers, null, 2)}`);
       }
-    } else {
-      console.error(`  📦 Body: none or empty`);
+      
+      // Log body solo per POST/PUT
+      if ((req.method === 'POST' || req.method === 'PUT') && req.body && Object.keys(req.body).length > 0) {
+        const bodySize = JSON.stringify(req.body).length;
+        if (bodySize > 500) {
+          console.error(`  Body: ${bodySize} bytes`);
+        } else {
+          console.error(`  Body: ${JSON.stringify(req.body, null, 2)}`);
+        }
+      }
     }
     
-    console.error(`  ──────────────────────────────────────────`);
-    
-    // Override res.end per loggare la risposta
+    // Override res.end per catturare errori e status codes
     const originalEnd = res.end;
     res.end = function(chunk, encoding) {
       const responseTimestamp = new Date().toISOString();
-      console.error(`[${responseTimestamp}] 📤 OUTGOING RESPONSE:`);
-      console.error(`  🎯 Status: ${res.statusCode} ${res.statusMessage || ''}`);
-      console.error(`  📋 Response Headers: ${JSON.stringify(res.getHeaders(), null, 2)}`);
+      const isError = res.statusCode >= 400;
       
-      if (chunk && chunk.length > 0) {
-        const responseSize = chunk.length;
-        if (responseSize > 1000) {
-          console.error(`  📦 Response Body: ${responseSize} bytes (too large to display)`);
-        } else {
-          try {
-            const responseText = chunk.toString();
-            console.error(`  📦 Response Body: ${responseText}`);
-          } catch (e) {
-            console.error(`  📦 Response Body: [binary data, ${responseSize} bytes]`);
+      // Log sempre gli errori e le richieste importanti
+      if (isError || shouldLog) {
+        console.error(`[${responseTimestamp}] 📤 RESPONSE: ${res.statusCode} ${res.statusMessage || ''}`);
+        
+        if (isError) {
+          // Dettagli completi per errori
+          console.error(`  ❌ ERROR DETAILS:`);
+          console.error(`    Status: ${res.statusCode}`);
+          console.error(`    Client: ${clientIP}`);
+          console.error(`    Path: ${req.originalUrl}`);
+          console.error(`    Method: ${req.method}`);
+          console.error(`    User-Agent: ${req.headers['user-agent'] || 'unknown'}`);
+          console.error(`    Referer: ${req.headers['referer'] || 'none'}`);
+          
+          // Log reason specifico per status codes comuni
+          const statusReasons = {
+            400: 'Bad Request - Invalid request syntax or parameters',
+            401: 'Unauthorized - Authentication required',
+            403: 'Forbidden - Insufficient permissions',
+            404: 'Not Found - Resource does not exist',
+            405: 'Method Not Allowed - HTTP method not supported',
+            408: 'Request Timeout - Server timed out waiting',
+            429: 'Too Many Requests - Rate limit exceeded',
+            500: 'Internal Server Error - Server encountered unexpected condition',
+            502: 'Bad Gateway - Invalid response from upstream server',
+            503: 'Service Unavailable - Server temporarily unavailable',
+            504: 'Gateway Timeout - Upstream server timeout'
+          };
+          
+          if (statusReasons[res.statusCode]) {
+            console.error(`    Reason: ${statusReasons[res.statusCode]}`);
+          }
+          
+          // Log response body per errori (se presente)
+          if (chunk && chunk.length > 0) {
+            try {
+              const responseText = chunk.toString();
+              if (responseText.length < 1000) {
+                console.error(`    Response: ${responseText}`);
+              } else {
+                console.error(`    Response: ${responseText.substring(0, 200)}... (${responseText.length} bytes)`);
+              }
+            } catch (e) {
+              console.error(`    Response: [binary data, ${chunk.length} bytes]`);
+            }
           }
         }
-      } else {
-        console.error(`  📦 Response Body: empty`);
       }
-      
-      console.error(`  ✅ Request completed in ${Date.now() - req.startTime}ms`);
-      console.error(`  ──────────────────────────────────────────`);
       
       originalEnd.call(this, chunk, encoding);
     };
     
-    req.startTime = Date.now();
     next();
   });
   const handleMcpRequest = async (req, res) => {
@@ -1025,32 +1036,52 @@ if (useStdio) {
 
   const PORT = process.env.PORT || 5000;
   
-  // Logging periodico delle statistiche
-  setInterval(() => {
-    const timestamp = new Date().toISOString();
-    console.error(`[${timestamp}] 📊 SERVER STATISTICS:`);
-    console.error(`  🌐 Server running on: http://0.0.0.0:${PORT}`);
-    console.error(`  🆔 Active Sessions: ${activeSessions.size}`);
-    if (activeSessions.size > 0) {
-      console.error(`  📋 Session IDs: ${Array.from(activeSessions.keys()).join(', ')}`);
+  // Statistiche in tempo reale (aggiornate solo quando cambiano)
+  let lastStatsUpdate = Date.now();
+  let lastSessionCount = activeSessions.size;
+  let lastMemoryUsage = 0;
+  
+  const updateStatsIfNeeded = () => {
+    const now = Date.now();
+    const currentSessionCount = activeSessions.size;
+    const currentMemoryUsage = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    
+    // Log solo se sono passati almeno 60 secondi O se ci sono cambiamenti significativi
+    if (now - lastStatsUpdate > 60000 || 
+        currentSessionCount !== lastSessionCount || 
+        Math.abs(currentMemoryUsage - lastMemoryUsage) > 50) {
+      
+      const timestamp = new Date().toISOString();
+      console.error(`[${timestamp}] 📊 STATS UPDATE:`);
+      console.error(`  🌐 Server: http://0.0.0.0:${PORT}`);
+      console.error(`  🆔 Sessions: ${currentSessionCount} ${currentSessionCount !== lastSessionCount ? `(changed from ${lastSessionCount})` : ''}`);
+      console.error(`  💾 Memory: ${currentMemoryUsage}MB ${Math.abs(currentMemoryUsage - lastMemoryUsage) > 50 ? `(changed from ${lastMemoryUsage}MB)` : ''}`);
+      console.error(`  ⏱️  Uptime: ${Math.round(process.uptime())}s`);
+      
+      if (currentSessionCount > 0) {
+        const sessionList = Array.from(activeSessions.keys()).slice(0, 5).join(', ');
+        const moreText = currentSessionCount > 5 ? '...' : '';
+        console.error(`  📋 Active Sessions: ${sessionList}${moreText}`);
+      }
+      
+      lastStatsUpdate = now;
+      lastSessionCount = currentSessionCount;
+      lastMemoryUsage = currentMemoryUsage;
     }
-    console.error(`  💾 Memory Usage: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB / ${Math.round(process.memoryUsage().heapTotal / 1024 / 1024)}MB`);
-    console.error(`  ⏱️  Uptime: ${Math.round(process.uptime())}s`);
-    console.error(`  ──────────────────────────────────────────`);
-  }, 30000); // Ogni 30 secondi
+  };
+  
+  // Aggiorna stats quando le sessioni cambiano
+  setInterval(updateStatsIfNeeded, 30000); // Check ogni 30 secondi
   
   app.listen(PORT, "0.0.0.0", () => {
     const timestamp = new Date().toISOString();
     console.error(`[${timestamp}] 🚀 KANKA MCP SERVER STARTED:`);
     console.error(`  🌐 Listening on: http://0.0.0.0:${PORT}`);
     console.error(`  🔗 HTTPS via Tailscale: https://your-node.ts.net`);
-    console.error(`  📡 SSE Endpoint: http://0.0.0.0:${PORT}/sse`);
-    console.error(`  📡 MCP Endpoint: http://0.0.0.0:${PORT}/mcp`);
-    console.error(`  📡 Message Endpoint: http://0.0.0.0:${PORT}/message`);
-    console.error(`  🏥 Health Endpoint: http://0.0.0.0:${PORT}/health`);
-    console.error(`  🔧 OAuth Endpoints: /oauth/authorize, /oauth/token, /oauth/callback`);
-    console.error(`  🎯 Trust Proxy: ENABLED (for Tailscale Funnel)`);
-    console.error(`  📊 CORS: ENABLED`);
+    console.error(`  📡 Endpoints: /sse, /mcp, /message, /health`);
+    console.error(`  🔧 OAuth: /oauth/authorize, /oauth/token, /oauth/callback`);
+    console.error(`  🎯 Smart Logging: ENABLED (errors + important requests only)`);
+    console.error(`  📊 Real-time Stats: ENABLED`);
     console.error(`  ──────────────────────────────────────────`);
   });
 }
