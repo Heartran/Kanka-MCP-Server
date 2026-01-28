@@ -1,12 +1,14 @@
-cd C:\actions-runner\repo\Kanka-MCP-Server
+cd $PSScriptRoot
 
 function Start-Server {
   git fetch
   git pull
   npm install
-  tailscale funnel 5000
+  # Using the more explicit serve command to avoid argument parsing issues
+  # and running it in the background so it doesn't block the Node server
+  Start-Process -FilePath "tailscale" -ArgumentList "serve", "--https=443", "--funnel", "5000" -NoNewWindow
   $env:PORT = "5000"
-  Start-Process -FilePath node -ArgumentList "index.js" -PassThru -NoNewWindow
+  return Start-Process -FilePath "node" -ArgumentList "index.js" -PassThru -NoNewWindow
 }
 
 $serverProcess = Start-Server
@@ -18,7 +20,8 @@ while ($true) {
   $remote = $null
   try {
     $remote = git rev-parse "@{u}"
-  } catch {
+  }
+  catch {
     $remote = $null
   }
 
