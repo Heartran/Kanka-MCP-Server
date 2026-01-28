@@ -524,6 +524,67 @@ if (useStdio) {
     }
     res.json({ status: "ok" });
   });
+
+  // Health check endpoint con informazioni dettagliate
+  app.get("/health", (req, res) => {
+    const timestamp = new Date().toISOString();
+    const uptime = process.uptime();
+    const memoryUsage = process.memoryUsage();
+    
+    console.error(`[${timestamp}] 🏥 HEALTH CHECK REQUESTED:`);
+    console.error(`  🌍 Client IP: ${req.ip}`);
+    console.error(`  📋 Headers: ${JSON.stringify(req.headers, null, 2)}`);
+    console.error(`  ──────────────────────────────────────────`);
+
+    const healthData = {
+      status: "healthy",
+      timestamp,
+      uptime: {
+        seconds: Math.round(uptime),
+        human: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.round(uptime % 60)}s`
+      },
+      server: {
+        version: "0.4.0",
+        port: process.env.PORT || 5000,
+        node_version: process.version,
+        platform: process.platform
+      },
+      memory: {
+        heap_used: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+        heap_total: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+        external: Math.round(memoryUsage.external / 1024 / 1024),
+        rss: Math.round(memoryUsage.rss / 1024 / 1024),
+        unit: "MB"
+      },
+      sessions: {
+        active_count: activeSessions.size,
+        session_ids: Array.from(activeSessions.keys()),
+        transports: Array.from(activeSessions.values()).map(t => t.constructor.name)
+      },
+      endpoints: {
+        mcp: `/mcp`,
+        sse: `/sse`,
+        message: `/message`,
+        messages: `/messages`,
+        oauth_authorize: `/oauth/authorize`,
+        oauth_token: `/oauth/token`,
+        oauth_callback: `/oauth/callback`,
+        well_known: `/.well-known/oauth-authorization-server`
+      },
+      kanka_api: {
+        base_url: KANKA_API_BASE,
+        token_configured: !!KANKA_API_TOKEN,
+        client_configured: !!(KANKA_CLIENT_ID && KANKA_CLIENT_SECRET)
+      },
+      features: {
+        cors_enabled: true,
+        trust_proxy: true,
+        verbose_logging: true
+      }
+    };
+
+    res.json(healthData);
+  });
   // Custom error handler for JSON syntax errors
   app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
@@ -986,6 +1047,7 @@ if (useStdio) {
     console.error(`  📡 SSE Endpoint: http://0.0.0.0:${PORT}/sse`);
     console.error(`  📡 MCP Endpoint: http://0.0.0.0:${PORT}/mcp`);
     console.error(`  📡 Message Endpoint: http://0.0.0.0:${PORT}/message`);
+    console.error(`  🏥 Health Endpoint: http://0.0.0.0:${PORT}/health`);
     console.error(`  🔧 OAuth Endpoints: /oauth/authorize, /oauth/token, /oauth/callback`);
     console.error(`  🎯 Trust Proxy: ENABLED (for Tailscale Funnel)`);
     console.error(`  📊 CORS: ENABLED`);
