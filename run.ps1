@@ -4,9 +4,9 @@ function Start-Server {
   git fetch
   git pull
   npm install
-  # Using the correct serve command syntax
+  # Using the correct serve command syntax with port 8443 to avoid conflicts
   # and running it in the background so it doesn't block the Node server
-  Start-Process -FilePath "tailscale" -ArgumentList "serve", "--https=443", "5000" -NoNewWindow
+  Start-Process -FilePath "tailscale" -ArgumentList "serve", "--https=8443", "5000" -NoNewWindow
   $env:PORT = "5000"
   return Start-Process -FilePath "node" -ArgumentList "index.js" -PassThru -NoNewWindow
 }

@@ -1077,7 +1077,7 @@ if (useStdio) {
     const timestamp = new Date().toISOString();
     console.error(`[${timestamp}] 🚀 KANKA MCP SERVER STARTED:`);
     console.error(`  🌐 Listening on: http://0.0.0.0:${PORT}`);
-    console.error(`  🔗 HTTPS via Tailscale: https://your-node.ts.net`);
+    console.error(`  🔗 HTTPS via Tailscale: https://pc-federico.tailb6c9bf.ts.net:8443`);
     console.error(`  📡 Endpoints: /sse, /mcp, /message, /health`);
     console.error(`  🔧 OAuth: /oauth/authorize, /oauth/token, /oauth/callback`);
     console.error(`  🎯 Smart Logging: ENABLED (errors + important requests only)`);
