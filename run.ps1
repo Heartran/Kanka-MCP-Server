@@ -1,4 +1,4 @@
-cd C:\Users\Federico\repo\Kanka-MCP-Server
+cd C:\actions-runner\repo\Kanka-MCP-Server
 
 function Start-Server {
   git pull
