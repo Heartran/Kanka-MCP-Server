@@ -22,22 +22,32 @@
 - Before opening a PR, ensure docs are updated, new commands are documented, and tests (if any) pass locally.
 - All commits should be done using **your own git identity**
 - Do not work directly on `main`: create a dedicated branch for any change before committing or pushing.
+# Identity & Git Hygiene
+
+- Author/committer identity is managed by the repo owner; do not change git config locally (no `git config` commands). Use the existing configuration as-is. Use $ENV variables for agent-specific commits.
+
+- Never use the Heartran git identity for commits or pushes.
+
+- Keep commits small and topical; prefer multiple commits over one large drop when touching orthogonal areas.
 - You should always commits submodules **before** the main repository
 
-## Identity & Git Hygiene
-- Author/committer identity is managed by the repo owner; do not change git config locally (no `git config` commands). Use the existing configuration as-is.
-- Keep commits small and topical; prefer multiple commits over one large drop when touching orthogonal areas.
+# Identity & Git Hygiene
 
+- Author/committer identity is managed by the repo owner; do not change git config locally (no `git config` commands). Use the existing configuration as-is. Use $ENV variables for agent-specific commits.
+
+- Never use the Heartran git identity for commits or pushes.
+
+- Keep commits small and topical; prefer multiple commits over one large drop when touching orthogonal areas.
 
 - Update `README.md` or dedicated doc files when adding new MCP endpoints.
 
 ## Git Identity
+
 - Every agent should have his own git identity when committing changes in order to have a more clear and readable history
 
 | Agent | GIT_COMMITTER_NAME / GIT_AUTHOR_NAME | GIT_COMMITTER_EMAIL / GIT_AUTHOR_EMAIL |
-|-------|:--------------------------------------:|----------------------------------------|
-| Codex | Codex                                | codex@users.noreply.github.com         |
-| Gemini | Gemini | gemini-code-assist@users.noreply.github.com |
-
-
-# Agent Template Developed by Heartran (https://github.com/heartran/)
+| --- | :---: | --- |
+| Codex | Codex | [codex@users.noreply.github.com](mailto:codex@users.noreply.github.com) |
+| Gemini | Gemini | [gemini-code-assist@users.noreply.github.com](mailto:gemini-code-assist@users.noreply.github.com) |
+| Cascade | Cascade | [cascade@users.noreply.github.com](mailto:cascade@users.noreply.github.com) |
+| GitHub Copilot | GitHub Copilot | [github-copilot@users.noreply.github.com](mailto:github-copilot@users.noreply.github.com) |

@@ -45,13 +45,74 @@ const kankaClient = axios.create({
 });
 
 async function kankaRequest(path, method = "GET", data = {}, params = {}, token = "") {
-  return await kankaClient.request({
-    url: path,
-    method,
-    data,
-    params,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const startTime = Date.now();
+  const timestamp = new Date().toISOString();
+  const url = `${KANKA_API_BASE}${path}`;
+  
+  console.error(`[${timestamp}] 🔗 KANKA API REQUEST:`);
+  console.error(`  📍 Method: ${method}`);
+  console.error(`  🔗 URL: ${url}`);
+  console.error(`  📋 Params: ${JSON.stringify(params, null, 2)}`);
+  console.error(`  🔑 Token: ${token ? `${token.substring(0, 10)}...` : 'none'}`);
+  
+  if (data && Object.keys(data).length > 0) {
+    const dataSize = JSON.stringify(data).length;
+    if (dataSize > 500) {
+      console.error(`  📦 Data: ${dataSize} bytes (too large to display)`);
+    } else {
+      console.error(`  📦 Data: ${JSON.stringify(data, null, 2)}`);
+    }
+  } else {
+    console.error(`  📦 Data: none`);
+  }
+  console.error(`  ──────────────────────────────────────────`);
+
+  try {
+    const response = await kankaClient.request({
+      url: path,
+      method,
+      data,
+      params,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    
+    const responseTime = Date.now() - startTime;
+    const responseTimestamp = new Date().toISOString();
+    
+    console.error(`[${responseTimestamp}] ✅ KANKA API RESPONSE:`);
+    console.error(`  🎯 Status: ${response.status} ${response.statusText}`);
+    console.error(`  ⏱️  Response Time: ${responseTime}ms`);
+    console.error(`  📏 Response Size: ${JSON.stringify(response.data).length} bytes`);
+    
+    if (response.headers) {
+      console.error(`  📋 Response Headers: ${JSON.stringify(response.headers, null, 2)}`);
+    }
+    
+    // Log dei dati di risposta (limitato)
+    const responseStr = JSON.stringify(response.data);
+    if (responseStr.length > 1000) {
+      console.error(`  📦 Response Data: ${responseStr.length} bytes (too large to display)`);
+      // Mostra solo i primi 200 caratteri
+      console.error(`  📦 Preview: ${responseStr.substring(0, 200)}...`);
+    } else {
+      console.error(`  📦 Response Data: ${responseStr}`);
+    }
+    console.error(`  ──────────────────────────────────────────`);
+    
+    return response;
+  } catch (error) {
+    const responseTime = Date.now() - startTime;
+    const errorTimestamp = new Date().toISOString();
+    
+    console.error(`[${errorTimestamp}] ❌ KANKA API ERROR:`);
+    console.error(`  ⏱️  Failed after: ${responseTime}ms`);
+    console.error(`  🎯 Status: ${error.response?.status || 'no response'}`);
+    console.error(`  💬 Message: ${error.message}`);
+    console.error(`  📋 Error Details: ${JSON.stringify(error.response?.data || error, null, 2)}`);
+    console.error(`  ──────────────────────────────────────────`);
+    
+    throw error;
+  }
 }
 
 const entities = [
@@ -277,6 +338,88 @@ if (useStdio) {
   app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+  
+  // Middleware di logging verboso per tutte le richieste
+  app.use((req, res, next) => {
+    const timestamp = new Date().toISOString();
+    const clientIP = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const referer = req.headers['referer'] || 'direct';
+    const xForwardedFor = req.headers['x-forwarded-for'] || 'none';
+    const xRealIP = req.headers['x-real-ip'] || 'none';
+    const sessionId = req.headers['mcp-session-id'] || 'none';
+    const contentType = req.headers['content-type'] || 'none';
+    const contentLength = req.headers['content-length'] || '0';
+    
+    console.error(`[${timestamp}] 🌐 INCOMING REQUEST:`);
+    console.error(`  📍 Method: ${req.method}`);
+    console.error(`  🔗 URL: ${req.protocol}://${req.get('host')}${req.originalUrl}`);
+    console.error(`  🌍 Client IP: ${clientIP}`);
+    console.error(`  🔄 X-Forwarded-For: ${xForwardedFor}`);
+    console.error(`  🎯 X-Real-IP: ${xRealIP}`);
+    console.error(`  🖥️  User-Agent: ${userAgent}`);
+    console.error(`  🔙 Referer: ${referer}`);
+    console.error(`  🆔 Session ID: ${sessionId}`);
+    console.error(`  📄 Content-Type: ${contentType}`);
+    console.error(`  📏 Content-Length: ${contentLength}`);
+    
+    // Log headers completi
+    console.error(`  📋 Headers: ${JSON.stringify(req.headers, null, 2)}`);
+    
+    // Log query parameters
+    if (Object.keys(req.query).length > 0) {
+      console.error(`  ❓ Query Params: ${JSON.stringify(req.query, null, 2)}`);
+    } else {
+      console.error(`  ❓ Query Params: none`);
+    }
+    
+    // Log body (solo se non è troppo grande)
+    if (req.body && Object.keys(req.body).length > 0) {
+      const bodySize = JSON.stringify(req.body).length;
+      if (bodySize > 1000) {
+        console.error(`  📦 Body: ${bodySize} bytes (too large to display)`);
+      } else {
+        console.error(`  📦 Body: ${JSON.stringify(req.body, null, 2)}`);
+      }
+    } else {
+      console.error(`  📦 Body: none or empty`);
+    }
+    
+    console.error(`  ──────────────────────────────────────────`);
+    
+    // Override res.end per loggare la risposta
+    const originalEnd = res.end;
+    res.end = function(chunk, encoding) {
+      const responseTimestamp = new Date().toISOString();
+      console.error(`[${responseTimestamp}] 📤 OUTGOING RESPONSE:`);
+      console.error(`  🎯 Status: ${res.statusCode} ${res.statusMessage || ''}`);
+      console.error(`  📋 Response Headers: ${JSON.stringify(res.getHeaders(), null, 2)}`);
+      
+      if (chunk && chunk.length > 0) {
+        const responseSize = chunk.length;
+        if (responseSize > 1000) {
+          console.error(`  📦 Response Body: ${responseSize} bytes (too large to display)`);
+        } else {
+          try {
+            const responseText = chunk.toString();
+            console.error(`  📦 Response Body: ${responseText}`);
+          } catch (e) {
+            console.error(`  📦 Response Body: [binary data, ${responseSize} bytes]`);
+          }
+        }
+      } else {
+        console.error(`  📦 Response Body: empty`);
+      }
+      
+      console.error(`  ✅ Request completed in ${Date.now() - req.startTime}ms`);
+      console.error(`  ──────────────────────────────────────────`);
+      
+      originalEnd.call(this, chunk, encoding);
+    };
+    
+    req.startTime = Date.now();
+    next();
+  });
   const handleMcpRequest = async (req, res) => {
     try {
       const sessionIdHeader = req.headers["mcp-session-id"];
@@ -696,7 +839,15 @@ if (useStdio) {
   app.all("/mcp", handleMcpRequest);
 
   app.get("/sse", async (req, res) => {
-    console.error(`[${new Date().toISOString()}] SSE Attempt...`);
+    const timestamp = new Date().toISOString();
+    const clientIP = req.ip || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    
+    console.error(`[${timestamp}] 🌊 SSE CONNECTION ATTEMPT:`);
+    console.error(`  🌍 Client IP: ${clientIP}`);
+    console.error(`  🖥️  User-Agent: ${userAgent}`);
+    console.error(`  ❓ Query Params: ${JSON.stringify(req.query, null, 2)}`);
+    console.error(`  📋 Headers: ${JSON.stringify(req.headers, null, 2)}`);
 
     // Header per forzare lo stream diretto
     res.setHeader('Content-Type', 'text/event-stream');
@@ -705,6 +856,7 @@ if (useStdio) {
     res.setHeader('X-Accel-Buffering', 'no');
 
     const token = getBearerToken(req) || getQueryValue(req.query.token) || "";
+    console.error(`  🔑 Token: ${token ? `${token.substring(0, 10)}...` : 'none'}`);
 
     // Usiamo un percorso relativo per l'endpoint dei messaggi
     const transport = new SSEServerTransport("/message", res);
@@ -712,20 +864,31 @@ if (useStdio) {
     const serverInstance = createKankaServer(token);
 
     activeSessions.set(sessionId, transport);
+    
+    console.error(`[${timestamp}] ✅ SSE SESSION CREATED:`);
+    console.error(`  🆔 Session ID: ${sessionId}`);
+    console.error(`  🔗 Transport: SSEServerTransport`);
+    console.error(`  📊 Active Sessions: ${activeSessions.size}`);
 
     await serverInstance.connect(transport);
-    console.error(`[${sessionId}] SSE Connected. Token: ${!!token}`);
+    console.error(`[${timestamp}] 🎉 SSE CONNECTED. Token: ${!!token}`);
 
     transport.onclose = () => {
-      console.error(`[${sessionId}] Transport onclose triggered.`);
+      const closeTimestamp = new Date().toISOString();
+      console.error(`[${closeTimestamp}] 🔌 SSE TRANSPORT CLOSED:`);
+      console.error(`  🆔 Session ID: ${sessionId}`);
     };
 
     res.on("close", () => {
-      console.error(`[${sessionId}] SSE Closed.`);
+      const closeTimestamp = new Date().toISOString();
+      console.error(`[${closeTimestamp}] 🚪 SSE CONNECTION CLOSED:`);
+      console.error(`  🆔 Session ID: ${sessionId}`);
+      console.error(`  📊 Active Sessions: ${activeSessions.size}`);
       // Teniamo la sessione viva per un po' per permettere il completamento dei POST
       setTimeout(() => {
         if (activeSessions.get(sessionId) === transport) {
           activeSessions.delete(sessionId);
+          console.error(`[${new Date().toISOString()}] 🗑️  Session ${sessionId} cleaned up`);
         }
       }, 60000);
     });
@@ -733,12 +896,35 @@ if (useStdio) {
 
   app.post("/message", async (req, res) => {
     const sessionId = getQueryValue(req.query.sessionId);
-    console.error(`[${sessionId}] POST /message received. Body keys: ${Object.keys(req.body || {})}`);
+    const timestamp = new Date().toISOString();
+    const clientIP = req.ip || 'unknown';
+    
+    console.error(`[${timestamp}] 📨 SSE MESSAGE RECEIVED:`);
+    console.error(`  🆔 Session ID: ${sessionId}`);
+    console.error(`  🌍 Client IP: ${clientIP}`);
+    console.error(`  📋 Headers: ${JSON.stringify(req.headers, null, 2)}`);
+    console.error(`  ❓ Query Params: ${JSON.stringify(req.query, null, 2)}`);
+    
+    if (req.body && Object.keys(req.body).length > 0) {
+      const bodySize = JSON.stringify(req.body).length;
+      if (bodySize > 1000) {
+        console.error(`  📦 Body: ${bodySize} bytes (too large to display)`);
+        console.error(`  📦 Preview: ${JSON.stringify(req.body).substring(0, 200)}...`);
+      } else {
+        console.error(`  📦 Body: ${JSON.stringify(req.body, null, 2)}`);
+      }
+    } else {
+      console.error(`  📦 Body: none or empty`);
+    }
+    
     const transport = sessionId ? activeSessions.get(sessionId) : undefined;
 
     if (transport instanceof SSEServerTransport) {
+      console.error(`  ✅ Transport found: SSEServerTransport`);
       await transport.handlePostMessage(req, res, req.body);
+      console.error(`  🎯 Message handled successfully`);
     } else if (sessionId && transport) {
+      console.error(`  ❌ Transport mismatch: session exists but uses different protocol`);
       res.status(400).json({
         jsonrpc: "2.0",
         error: {
@@ -748,9 +934,11 @@ if (useStdio) {
         id: null,
       });
     } else {
-      console.error(`[${sessionId}] POST Failed: Session unknown or expired.`);
+      console.error(`  ❌ Session not found: ${sessionId}`);
+      console.error(`  📊 Active Sessions: ${Array.from(activeSessions.keys()).join(', ')}`);
       res.status(400).send("Session not found");
     }
+    console.error(`  ──────────────────────────────────────────`);
   });
 
   app.post("/messages", async (req, res) => {
@@ -775,7 +963,32 @@ if (useStdio) {
   });
 
   const PORT = process.env.PORT || 5000;
+  
+  // Logging periodico delle statistiche
+  setInterval(() => {
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] 📊 SERVER STATISTICS:`);
+    console.error(`  🌐 Server running on: http://0.0.0.0:${PORT}`);
+    console.error(`  🆔 Active Sessions: ${activeSessions.size}`);
+    if (activeSessions.size > 0) {
+      console.error(`  📋 Session IDs: ${Array.from(activeSessions.keys()).join(', ')}`);
+    }
+    console.error(`  💾 Memory Usage: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB / ${Math.round(process.memoryUsage().heapTotal / 1024 / 1024)}MB`);
+    console.error(`  ⏱️  Uptime: ${Math.round(process.uptime())}s`);
+    console.error(`  ──────────────────────────────────────────`);
+  }, 30000); // Ogni 30 secondi
+  
   app.listen(PORT, "0.0.0.0", () => {
-    console.error(`Kanka MCP Server listening on port ${PORT} (HTTP)`);
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] 🚀 KANKA MCP SERVER STARTED:`);
+    console.error(`  🌐 Listening on: http://0.0.0.0:${PORT}`);
+    console.error(`  🔗 HTTPS via Tailscale: https://your-node.ts.net`);
+    console.error(`  📡 SSE Endpoint: http://0.0.0.0:${PORT}/sse`);
+    console.error(`  📡 MCP Endpoint: http://0.0.0.0:${PORT}/mcp`);
+    console.error(`  📡 Message Endpoint: http://0.0.0.0:${PORT}/message`);
+    console.error(`  🔧 OAuth Endpoints: /oauth/authorize, /oauth/token, /oauth/callback`);
+    console.error(`  🎯 Trust Proxy: ENABLED (for Tailscale Funnel)`);
+    console.error(`  📊 CORS: ENABLED`);
+    console.error(`  ──────────────────────────────────────────`);
   });
 }
