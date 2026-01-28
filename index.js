@@ -908,7 +908,43 @@ if (useStdio) {
     return isInitializeRequest(body);
   };
 
-  app.all("/mcp", handleMcpRequest);
+  // Endpoint specifico per GET /mcp che redirect a SSE o restituisce info
+  app.get("/mcp", (req, res) => {
+    const accept = req.headers?.accept || "";
+    if (typeof accept === "string" && accept.includes("text/event-stream")) {
+      return handleMcpRequest(req, res);
+    }
+    
+    // Per GET normali, restituisci informazioni sull'endpoint
+    res.status(200).json({
+      name: "Kanka MCP Server",
+      version: "0.4.0",
+      endpoints: {
+        mcp_post: {
+          method: "POST",
+          url: req.originalUrl,
+          description: "JSON-RPC 2.0 MCP protocol endpoint"
+        },
+        sse: {
+          method: "GET",
+          url: "/sse",
+          description: "Server-Sent Events for real-time communication"
+        },
+        health: {
+          method: "GET", 
+          url: "/health",
+          description: "Server health check endpoint"
+        }
+      },
+      usage: {
+        post: "Send JSON-RPC 2.0 requests via POST to /mcp",
+        sse: "Connect to /sse for real-time bidirectional communication"
+      }
+    });
+  });
+
+  // Gestisci solo POST per il protocollo MCP
+  app.post("/mcp", handleMcpRequest);
 
   app.get("/sse", async (req, res) => {
     const timestamp = new Date().toISOString();
