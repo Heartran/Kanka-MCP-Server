@@ -1,0 +1,4 @@
+AGENTS.md
+.github/workflows/node.js.yml
+index.js
+tests/test-invalid-json.js
