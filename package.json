@@ -4,12 +4,21 @@
   "type": "module",
   "description": "Minimal MCP-style proxy server for the Kanka REST API.",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node tests/test-invalid-json.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
     "axios": "^1.7.7",
     "cors": "^2.8.5",
     "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.3"
   }
 }
