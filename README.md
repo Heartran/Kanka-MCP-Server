@@ -2,12 +2,71 @@
 
 Minimal Model Context Protocol (MCP) proxy for the Kanka REST API using Node.js and Express.
 
-## Setup
+## Prerequisites
 
 - Node.js 20+.
-- Install dependencies: `npm install`.
-- Provide a token via `export KANKA_API_TOKEN=your_token_here` (or edit `config.js`).
-- Optional OAuth: set `KANKA_CLIENT_ID`, `KANKA_CLIENT_SECRET`, and `KANKA_REDIRECT_URI` (e.g. `http://localhost:5000/oauth/callback`).
+- A Kanka API token.
+
+## Install
+
+```bash
+npm install
+```
+
+## MCP Installation Rules (client-side)
+
+This section follows the same installation logic used in official MCP docs and official MCP servers:
+
+- Use explicit `command`, `args`, and `env` in your client config.
+- Use absolute paths for local scripts/binaries (avoid relative paths).
+- Keep secrets in `env` (for example `KANKA_API_TOKEN`), not hardcoded in code/config files.
+- Pick one transport for each use case:
+  - local STDIO (`node index.js --stdio`)
+  - remote Streamable HTTP (`/mcp`)
+- Restart the MCP client after editing its MCP config.
+
+### Option A: Local STDIO server (recommended for desktop clients)
+
+Use a standard MCP `mcpServers` entry (same structure used by official examples):
+
+```json
+{
+  "mcpServers": {
+    "kanka": {
+      "command": "node",
+      "args": ["<ABSOLUTE_PATH_TO_REPO>/index.js", "--stdio"],
+      "env": {
+        "KANKA_API_TOKEN": "<YOUR_KANKA_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+Notes:
+- On Windows, prefer forward slashes in paths (`C:/...`) or escaped backslashes (`C:\\...`).
+- Optional OAuth env vars are supported too: `KANKA_CLIENT_ID`, `KANKA_CLIENT_SECRET`, `KANKA_REDIRECT_URI`.
+
+### Option B: Streamable HTTP server
+
+Start the server with `PORT` set:
+
+```bash
+# Bash
+PORT=5000 npm start
+```
+
+```powershell
+# PowerShell
+$env:PORT = "5000"
+npm start
+```
+
+Then connect an MCP client to `http://127.0.0.1:5000/mcp`.
+Auth can be provided using:
+
+- `Authorization: Bearer <token>` (preferred), or
+- `?token=<token>` on the first initialization request.
 
 ## Run modes
 
