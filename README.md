@@ -44,6 +44,7 @@ Use a standard MCP `mcpServers` entry (same structure used by official examples)
 ```
 
 Notes:
+
 - On Windows, prefer forward slashes in paths (`C:/...`) or escaped backslashes (`C:\\...`).
 - Optional OAuth env vars are supported too: `KANKA_CLIENT_ID`, `KANKA_CLIENT_SECRET`, `KANKA_REDIRECT_URI`.
 
@@ -119,3 +120,7 @@ npm run lint
 npm run format:check
 npm test
 ```
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
