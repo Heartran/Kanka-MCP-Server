@@ -5,7 +5,7 @@ import { KANKA_API_BASE } from "./config.js";
 
 const sdk = await loadSdk();
 
-const { Server, StdioServerTransport, CallToolRequestSchema, ListToolsRequestSchema } = sdk;
+const { Server, StdioServerTransport, CallToolRequestSchema, ListToolsRequestSchema, InitializeRequestSchema } = sdk;
 
 async function loadSdk() {
   try {
@@ -82,6 +82,21 @@ async function createKankaServer() {
     { name: "kanka-mcp-server", version: "0.5.0" },
     { capabilities: { tools: {} } }
   );
+
+  // Handle initialization properly
+  server.setRequestHandler(InitializeRequestSchema, async (request) => {
+    const { params } = request;
+    if (params?.config?.KANKA_API_TOKEN) {
+      global.setKankaApiToken(params.config.KANKA_API_TOKEN);
+    }
+
+    // Return proper initialize response
+    return {
+      protocolVersion: "2025-11-25",
+      capabilities: { tools: {} },
+      serverInfo: { name: "kanka-mcp-server", version: "0.5.0" }
+    };
+  });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools = [
@@ -256,7 +271,7 @@ async function createKankaServer() {
 }
 
 // --- Start stdio transport ---
-const server = createKankaServer();
+const server = await createKankaServer();
 const transport = new StdioServerTransport();
-await transport.start(server);
+await server.connect(transport);
 console.error("[kanka-mcp] Server running on stdio");
