@@ -3,3 +3,4 @@ npm-debug.log*
 .env
 .DS_Store
 # Provided by (https://github.com/heartran/)[Heartran]
+*.mcpb
