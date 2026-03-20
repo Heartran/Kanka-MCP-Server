@@ -1,20 +1,21 @@
 {
   "name": "kanka-mcp",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "type": "module",
-  "description": "Minimal MCP-style proxy server for the Kanka REST API.",
+  "description": "MCP tool for the Kanka worldbuilding API — runs locally via stdio.",
+  "bin": {
+    "kanka-mcp": "./index.js"
+  },
   "scripts": {
     "start": "node index.js",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node tests/test-invalid-json.js"
+    "test": "node tests/test-stdio.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
-    "axios": "^1.7.7",
-    "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "axios": "^1.7.7"
   },
   "devDependencies": {
     "eslint": "^8.57.1",
