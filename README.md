@@ -1,11 +1,11 @@
-# Kanka MCP Server
+# Kanka MCP Tool
 
-Minimal Model Context Protocol (MCP) proxy for the Kanka REST API using Node.js and Express.
+Local MCP tool for the Kanka worldbuilding API. Runs on your machine via stdio — no remote server needed.
 
 ## Prerequisites
 
 - Node.js 20+.
-- A Kanka API token.
+- A Kanka API token (get one at [kanka.io/en/settings/api](https://kanka.io/en/settings/api)).
 
 ## Install
 
@@ -13,28 +13,18 @@ Minimal Model Context Protocol (MCP) proxy for the Kanka REST API using Node.js 
 npm install
 ```
 
-## MCP Installation Rules (client-side)
+## Usage
 
-This section follows the same installation logic used in official MCP docs and official MCP servers:
+### MCP client configuration (Claude Desktop, Cursor, etc.)
 
-- Use explicit `command`, `args`, and `env` in your client config.
-- Use absolute paths for local scripts/binaries (avoid relative paths).
-- Keep secrets in `env` (for example `KANKA_API_TOKEN`), not hardcoded in code/config files.
-- Pick one transport for each use case:
-  - local STDIO (`node index.js --stdio`)
-  - remote Streamable HTTP (`/mcp`)
-- Restart the MCP client after editing its MCP config.
-
-### Option A: Local STDIO server (recommended for desktop clients)
-
-Use a standard MCP `mcpServers` entry (same structure used by official examples):
+Add this to your MCP client config:
 
 ```json
 {
   "mcpServers": {
     "kanka": {
       "command": "node",
-      "args": ["<ABSOLUTE_PATH_TO_REPO>/index.js", "--stdio"],
+      "args": ["<ABSOLUTE_PATH_TO_REPO>/index.js"],
       "env": {
         "KANKA_API_TOKEN": "<YOUR_KANKA_TOKEN>"
       }
@@ -44,65 +34,35 @@ Use a standard MCP `mcpServers` entry (same structure used by official examples)
 ```
 
 Notes:
-- On Windows, prefer forward slashes in paths (`C:/...`) or escaped backslashes (`C:\\...`).
-- Optional OAuth env vars are supported too: `KANKA_CLIENT_ID`, `KANKA_CLIENT_SECRET`, `KANKA_REDIRECT_URI`.
+- Replace `<ABSOLUTE_PATH_TO_REPO>` with the full path to this repository.
+- On Windows, prefer forward slashes (`C:/Users/...`) or escaped backslashes (`C:\\Users\\...`).
+- Restart the MCP client after editing the config.
 
-### Option B: Streamable HTTP server
-
-Start the server with `PORT` set:
+### Run directly
 
 ```bash
-# Bash
-PORT=5000 npm start
+KANKA_API_TOKEN=your_token npm start
 ```
 
-```powershell
-# PowerShell
-$env:PORT = "5000"
-npm start
+### Install globally
+
+```bash
+npm install -g .
+KANKA_API_TOKEN=your_token kanka-mcp
 ```
 
-Then connect an MCP client to `http://127.0.0.1:5000/mcp`.
-Auth can be provided using:
+## Available tools
 
-- `Authorization: Bearer <token>` (preferred), or
-- `?token=<token>` on the first initialization request.
+The tool exposes 82 MCP tools for interacting with Kanka:
 
-## Run modes
-
-- STDIO (CLI/IDE): `node index.js --stdio` or `npm start -- --stdio`. This is also the default when `PORT` is unset.
-- HTTP / Streamable MCP: `PORT=5000 npm start` (defaults to `5000`). You can pass `?token=<your_token>` on the first call if you do not want to rely on the env var.
-
-## OAuth helper endpoints
-
-- `GET /oauth/login`: redirect to Kanka for OAuth consent (requires `KANKA_CLIENT_ID` and `KANKA_REDIRECT_URI`).
-- `GET /oauth/callback`: exchanges the returned `code` for `access_token` and `refresh_token` and returns the payload.
-- `GET /.well-known/oauth-authorization-server`: OAuth metadata for MCP clients.
-- `GET /oauth/authorize`: starts OAuth flow (proxying through Kanka at `app.kanka.io`).
-- `POST /oauth/token`: exchanges authorization codes (and refresh tokens) for access tokens via `app.kanka.io`.
-
-You can also override Kanka OAuth settings per request by passing `kanka_client_id`, `kanka_client_secret`, `kanka_redirect_uri`, and/or `scope` as query parameters (authorize/login) or form fields (token). When omitted, no scope is sent to Kanka (recommended).
-
-## MCP endpoints
-
-The server exposes MCP-compatible transports. Clients handle initialization and tool calls; no custom JSON endpoints are required.
-
-Streamable HTTP (recommended, protocol 2025-11-25):
-
-- `GET /mcp` (or `/` when the client expects an SSE stream) for the SSE stream (send `Authorization: Bearer <token>` or `?token=<token>`)
-- `POST /mcp` for JSON-RPC requests (send `Authorization: Bearer <token>` or `?token=<token>` on the first initialize call if not using the env var)
-- `DELETE /mcp` to terminate a session
-
-Deprecated HTTP+SSE fallback (protocol 2024-11-05):
-
-- `GET /sse` to open the SSE stream (send `Authorization: Bearer <token>` or `?token=<token>`)
-- `POST /message?sessionId=<id>` to send JSON-RPC
-- `POST /messages?sessionId=<id>` alias for legacy clients
-
-Token handling:
-
-- Set `KANKA_API_TOKEN` in the environment for a default token.
-- Supply `Authorization: Bearer <token>` (preferred) or `?token=<token>` when initiating HTTP/SSE sessions if you prefer per-session tokens.
+- **list_campaigns** — List all campaigns
+- **search** — Search entities within a campaign
+- For each entity type (Character, Location, Family, Organization, Item, Note, Event, Calendar, Timeline, Creature, Race, Quest, Map, Journal, Ability, Entity):
+  - `list_<entities>` — List all
+  - `get_<entity>` — Get details
+  - `create_<entity>` — Create new
+  - `update_<entity>` — Update existing
+  - `delete_<entity>` — Delete existing
 
 ## Contributing
 
@@ -110,7 +70,6 @@ Community contributions are welcome.
 
 - Read [CONTRIBUTING.md](CONTRIBUTING.md) for workflow, coding standards, and PR checklist.
 - Review [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before participating.
-- Use the provided GitHub issue templates and PR template to keep reports and reviews consistent.
 
 ### Local quality checks
 

@@ -1,12 +1,12 @@
 # Repository Guidelines
 
-- `index.js`: Main entry point for the MCP proxy server.
-- `config.js`: Configuration for API tokens and base URLs.
-- `package.json`: Project metadata and dependencies (Node.js/Express).
+- `index.js`: Main entry point — MCP tool running via stdio.
+- `config.js`: Configuration for API token and base URL.
+- `package.json`: Project metadata and dependencies.
 
 - Install deps: `npm install` (Node 20+).
-- Start server: `npm start`.
-- Environment: Set `KANKA_API_TOKEN` in environment variables or `config.js`.
+- Run tool: `KANKA_API_TOKEN=... npm start`.
+- Environment: Set `KANKA_API_TOKEN` in environment variables.
 
 ## Coding Style & Naming Conventions
 - Default to 2-space indentation in TS/JS/CSS, UTF-8 text, and trailing newlines. Use PascalCase for types/classes, camelCase for variables/functions, kebab-case for asset filenames, and snake_case for data/config files.
