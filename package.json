@@ -1,6 +1,6 @@
 {
   "name": "kanka-mcp",
-  "version": "0.5.0",
+  "version": "2.0.0",
   "type": "module",
   "description": "MCP tool for the Kanka worldbuilding API — runs locally via stdio.",
   "bin": {

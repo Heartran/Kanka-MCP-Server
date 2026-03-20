@@ -1,0 +1,44 @@
+{
+  "manifest_version": "0.2",
+  "name": "Kanka MCP Server",
+  "version": "2.0.0",
+  "description": "MCP tool for the Kanka worldbuilding API — runs locally via stdio.",
+  "author": {
+    "name": "Heartran",
+    "email": "heartran@papin-network.it",
+    "url": "https://github.com/Heartran"
+  },
+  "homepage": "https://github.com/Heartran/Kanka-MCP-Server",
+  "documentation": "https://github.com/Heartran/Kanka-MCP-Server/wiki",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/index.js"
+      ],
+      "env": {}
+    }
+  },
+  "user_config": {
+    "KANKA_API_TOKEN": {
+      "type": "string",
+      "title": "Kanka API Key",
+      "description": "The API Key provided by Kanka",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "keywords": [
+    "kanka",
+    "worldbuilding",
+    "rpg"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Heartran/Kanka-MCP-Server"
+  }
+}
