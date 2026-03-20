@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import axios from "axios";
-import { KANKA_API_BASE, KANKA_API_TOKEN } from "./config.js";
+import { KANKA_API_BASE } from "./config.js";
 
 const sdk = await loadSdk();
 
@@ -68,7 +68,16 @@ const entities = [
   { name: "Entity", plural: "entities" },
 ];
 
-function createKankaServer(token) {
+// Global variable to store the API token
+let globalKankaApiToken = process.env.KANKA_API_TOKEN || "";
+
+// Function to set the token from outside
+global.setKankaApiToken = (token) => {
+  globalKankaApiToken = token;
+  console.error("[kanka-mcp] API token set");
+};
+
+async function createKankaServer() {
   const server = new Server(
     { name: "kanka-mcp-server", version: "0.5.0" },
     { capabilities: { tools: {} } }
@@ -152,8 +161,8 @@ function createKankaServer(token) {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     console.error(`[tool] ${name} ${JSON.stringify(args)}`);
-    const finalToken = token || KANKA_API_TOKEN;
-    if (!finalToken) throw new Error("Missing Kanka API Token. Set KANKA_API_TOKEN environment variable.");
+    const finalToken = globalKankaApiToken;
+    if (!finalToken) throw new Error("Missing Kanka API Token. Please configure it in the MCP settings or set KANKA_API_TOKEN environment variable.");
 
     try {
       let response;
@@ -247,7 +256,7 @@ function createKankaServer(token) {
 }
 
 // --- Start stdio transport ---
-const server = createKankaServer(KANKA_API_TOKEN);
+const server = createKankaServer();
 const transport = new StdioServerTransport();
-await server.connect(transport);
+await transport.start(server);
 console.error("[kanka-mcp] Server running on stdio");
