@@ -1,0 +1,18 @@
+# This workflow will verify if the manifest.json is valid
+# It will use official mcpb npm package
+
+name: MCPB Validation (Claude Extension)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validate:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+
