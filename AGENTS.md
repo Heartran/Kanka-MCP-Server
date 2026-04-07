@@ -52,5 +52,5 @@
 | --- | :---: | --- |
 | Codex | Codex | [199175422+chatgpt-codex-connector[bot]@users.noreply.github.com](mailto:199175422+chatgpt-codex-connector[bot]@users.noreply.github.com) |
 | Gemini | Gemini | [176961590+gemini-code-assist[bot]@users.noreply.github.com](mailto:176961590+gemini-code-assist[bot]@users.noreply.github.com) |
-| Cascade | Cascade | [cascade@users.noreply.github.com](mailto:cascade@users.noreply.github.com) |
+| Cascade | Cascade | [272510577+windsurf-cascade-agent[bot]@users.noreply.github.com](mailto:272510577+windsurf-cascade-agent[bot]@users.noreply.github.com) |
 | GitHub Copilot | Copilot[bot] | [198982749+Copilot[bot]@users.noreply.github.com](mailto:198982749+Copilot[bot]@users.noreply.github.com) |
