@@ -85,9 +85,10 @@ async function createKankaServer() {
 
   // Handle initialization properly
   server.setRequestHandler(InitializeRequestSchema, async (request) => {
-    const { params } = request;
-    if (params?.config?.KANKA_API_TOKEN) {
-      global.setKankaApiToken(params.config.KANKA_API_TOKEN);
+    // Check both direct params and nested config for token
+    const token = request.params?.KANKA_API_TOKEN || request.params?.config?.KANKA_API_TOKEN;
+    if (token) {
+      global.setKankaApiToken(token);
     }
 
     // Return proper initialize response
