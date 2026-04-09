@@ -1,2 +1,11 @@
 export const KANKA_API_BASE = "https://api.kanka.io/1.0";
-export const KANKA_API_TOKEN = process.env.KANKA_API_TOKEN || "";
+
+let _token = process.env.KANKA_API_TOKEN || "";
+
+export function getKankaApiToken() {
+  return _token;
+}
+
+export function setKankaApiToken(token) {
+  _token = token;
+}
