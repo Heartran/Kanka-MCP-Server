@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.2",
   "name": "Kanka MCP Server",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "MCP tool for the Kanka worldbuilding API — runs locally via stdio.",
   "author": {
     "name": "Heartran",
@@ -19,7 +19,9 @@
       "args": [
         "${__dirname}/index.js"
       ],
-      "env": {}
+      "env": {
+        "KANKA_API_TOKEN": "${KANKA_API_TOKEN}"
+      }
     }
   },
   "user_config": {
