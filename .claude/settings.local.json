@@ -8,7 +8,7 @@
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
       "Bash(git push:*)",
-      "Bash(gh pr create --title 'Fix token injection and SDK imports \\(v2.0.2\\)' --body ':*)",
+      "Bash(gh pr create --title 'Fix token injection and SDK imports \\(v2.0.3\\)' --body ':*)",
       "Bash(gh pr:*)"
     ]
   }
