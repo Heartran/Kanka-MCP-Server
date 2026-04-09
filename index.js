@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import axios from "axios";
-import { KANKA_API_BASE } from "./config.js";
+import { KANKA_API_BASE, getKankaApiToken } from "./config.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -12,7 +12,15 @@ const kankaClient = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-async function kankaRequest(path, method = "GET", data = {}, params = {}, token = "") {
+kankaClient.interceptors.request.use((config) => {
+  const token = getKankaApiToken();
+  if (token) {
+    config.headers.set("Authorization", `Bearer ${token}`);
+  }
+  return config;
+});
+
+async function kankaRequest(path, method = "GET", data = {}, params = {}) {
   const startTime = Date.now();
   console.error(`[kanka] ${method} ${KANKA_API_BASE}${path}`);
 
@@ -22,7 +30,6 @@ async function kankaRequest(path, method = "GET", data = {}, params = {}, token 
       method,
       data,
       params,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
 
     console.error(`[kanka] ${response.status} (${Date.now() - startTime}ms)`);
@@ -50,8 +57,6 @@ const entities = [
   { name: "Journal", plural: "journals" },
   { name: "Ability", plural: "abilities" },
 ];
-
-const globalKankaApiToken = process.env.KANKA_API_TOKEN || "";
 
 async function createKankaServer() {
   const server = new Server(
@@ -138,21 +143,21 @@ async function createKankaServer() {
     const { name, arguments: args } = request.params;
     console.error(`[tool] ${name} ${JSON.stringify(args)}`);
 
-    if (!globalKankaApiToken) {
+    if (!getKankaApiToken()) {
       throw new Error("Missing Kanka API Token. Please configure it in the MCP settings or set KANKA_API_TOKEN environment variable.");
     }
 
     try {
       let response;
       if (name === "list_campaigns") {
-        response = await kankaRequest("/campaigns", "GET", {}, {}, globalKankaApiToken);
+        response = await kankaRequest("/campaigns");
       } else if (name === "search") {
         const term = encodeURIComponent(args.q);
         try {
-          response = await kankaRequest(`/campaigns/${args.campaignId}/search/${term}`, "GET", {}, {}, globalKankaApiToken);
+          response = await kankaRequest(`/campaigns/${args.campaignId}/search/${term}`);
         } catch (err) {
           if (err.response?.status === 404) {
-            response = await kankaRequest(`/search/${term}`, "GET", {}, { campaign_id: args.campaignId }, globalKankaApiToken);
+            response = await kankaRequest(`/search/${term}`, "GET", {}, { campaign_id: args.campaignId });
           } else {
             throw err;
           }
@@ -169,18 +174,13 @@ async function createKankaServer() {
             `/campaigns/${args.campaignId}/${listMatch[1]}`,
             "GET",
             {},
-            { page: args.page },
-            globalKankaApiToken
+            { page: args.page }
           );
         } else if (getMatch) {
           const entity = entities.find((e) => e.name.toLowerCase() === getMatch[1]);
           if (!entity) throw new Error(`Unknown entity type: ${getMatch[1]}`);
           response = await kankaRequest(
-            `/campaigns/${args.campaignId}/${entity.plural}/${args.id}`,
-            "GET",
-            {},
-            {},
-            globalKankaApiToken
+            `/campaigns/${args.campaignId}/${entity.plural}/${args.id}`
           );
         } else if (createMatch) {
           const entity = entities.find((e) => e.name.toLowerCase() === createMatch[1]);
@@ -191,9 +191,7 @@ async function createKankaServer() {
           response = await kankaRequest(
             `/campaigns/${args.campaignId}/${entity.plural}`,
             "POST",
-            args.data,
-            {},
-            globalKankaApiToken
+            args.data
           );
         } else if (updateMatch) {
           const entity = entities.find((e) => e.name.toLowerCase() === updateMatch[1]);
@@ -204,19 +202,14 @@ async function createKankaServer() {
           response = await kankaRequest(
             `/campaigns/${args.campaignId}/${entity.plural}/${args.id}`,
             "PUT",
-            args.data,
-            {},
-            globalKankaApiToken
+            args.data
           );
         } else if (deleteMatch) {
           const entity = entities.find((e) => e.name.toLowerCase() === deleteMatch[1]);
           if (!entity) throw new Error(`Unknown entity type: ${deleteMatch[1]}`);
           response = await kankaRequest(
             `/campaigns/${args.campaignId}/${entity.plural}/${args.id}`,
-            "DELETE",
-            {},
-            {},
-            globalKankaApiToken
+            "DELETE"
           );
         } else {
           throw new Error(`Unknown tool: ${name}`);
@@ -252,6 +245,13 @@ try {
   transport.onclose = () => {
     console.error("[kanka-mcp] Transport closed");
   };
+
+  const token = getKankaApiToken();
+  console.error(
+    token
+      ? `[kanka-mcp] API token detected (${token.length} chars)`
+      : "[kanka-mcp] WARNING: No API token found. Set KANKA_API_TOKEN environment variable."
+  );
 
   await server.connect(transport);
   console.error("[kanka-mcp] Server running on stdio");
