@@ -55,7 +55,7 @@ const globalKankaApiToken = process.env.KANKA_API_TOKEN || "";
 
 async function createKankaServer() {
   const server = new Server(
-    { name: "kanka-mcp-server", version: "2.0.2" },
+    { name: "kanka-mcp-server", version: "2.0.3" },
     { capabilities: { tools: {} } }
   );
 
@@ -231,8 +231,31 @@ async function createKankaServer() {
   return server;
 }
 
+// --- Error handling ---
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[kanka-mcp] Unhandled Rejection at:", promise, "reason:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("[kanka-mcp] Uncaught Exception:", error);
+});
+
 // --- Start stdio transport ---
-const server = await createKankaServer();
-const transport = new StdioServerTransport();
-await server.connect(transport);
-console.error("[kanka-mcp] Server running on stdio");
+try {
+  const server = await createKankaServer();
+  const transport = new StdioServerTransport();
+
+  transport.onerror = (error) => {
+    console.error("[kanka-mcp] Transport error:", error);
+  };
+
+  transport.onclose = () => {
+    console.error("[kanka-mcp] Transport closed");
+  };
+
+  await server.connect(transport);
+  console.error("[kanka-mcp] Server running on stdio");
+} catch (error) {
+  console.error("[kanka-mcp] Failed to start server:", error);
+  process.exit(1);
+}
