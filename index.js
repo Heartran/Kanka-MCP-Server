@@ -60,7 +60,7 @@ const entities = [
 
 async function createKankaServer() {
   const server = new Server(
-    { name: "kanka-mcp-server", version: "2.0.3" },
+    { name: "kanka-mcp-server", version: "2.1.0" },
     { capabilities: { tools: {} } }
   );
 
