@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"import\\('@modelcontextprotocol/sdk'\\).then\\(m => console.log\\(Object.keys\\(m\\)\\)\\).catch\\(e => console.error\\('barrel failed:', e.message\\)\\)\")",
+      "Bash(node -e \"import\\('@modelcontextprotocol/sdk/server/index.js'\\).then\\(m => console.log\\(Object.keys\\(m\\).slice\\(0,5\\)\\)\\).catch\\(e => console.error\\('server failed:', e.message\\)\\)\")",
+      "Bash(KANKA_API_TOKEN=test-token node tests/test-stdio.js)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(gh pr create --title 'Fix token injection and SDK imports \\(v2.0.2\\)' --body ':*)",
+      "Bash(gh pr:*)"
+    ]
+  }
+}
