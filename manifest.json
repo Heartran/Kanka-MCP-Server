@@ -20,7 +20,7 @@
         "${__dirname}/index.js"
       ],
       "env": {
-        "KANKA_API_TOKEN": "${KANKA_API_TOKEN}"
+        "KANKA_API_TOKEN": "${user_config.KANKA_API_TOKEN}"
       }
     }
   },
