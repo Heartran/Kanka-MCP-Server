@@ -78,6 +78,10 @@ async function createKankaServer() {
           properties: {
             campaignId: { type: "number" },
             page: { type: "number" },
+            entries: {
+              type: "boolean",
+              description: "Include full entry/entry_parsed text (default true). Set false to omit the long entry fields and shrink the response.",
+            },
           },
           required: ["campaignId"],
         },
@@ -176,6 +180,9 @@ async function createKankaServer() {
             {},
             { page: args.page }
           );
+          if (args.entries === false && response.data && Array.isArray(response.data.data)) {
+            response.data.data = response.data.data.map(({ entry, entry_parsed, ...rest }) => rest);
+          }
         } else if (getMatch) {
           const entity = entities.find((e) => e.name.toLowerCase() === getMatch[1]);
           if (!entity) throw new Error(`Unknown entity type: ${getMatch[1]}`);
