@@ -2,6 +2,7 @@
 
 import axios from "axios";
 import { KANKA_API_BASE, getKankaApiToken } from "./config.js";
+import { listEntities, MAX_PER_PAGE, ENTRY_FILTERS } from "./list.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -22,7 +23,10 @@ kankaClient.interceptors.request.use((config) => {
 
 async function kankaRequest(path, method = "GET", data = {}, params = {}) {
   const startTime = Date.now();
-  console.error(`[kanka] ${method} ${KANKA_API_BASE}${path}`);
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== null)
+  ).toString();
+  console.error(`[kanka] ${method} ${KANKA_API_BASE}${path}${query ? `?${query}` : ""}`);
 
   try {
     const response = await kankaClient.request({
@@ -60,7 +64,7 @@ const entities = [
 
 async function createKankaServer() {
   const server = new Server(
-    { name: "kanka-mcp-server", version: "2.1.0" },
+    { name: "kanka-mcp-server", version: "2.2.0" },
     { capabilities: { tools: {} } }
   );
 
@@ -72,15 +76,26 @@ async function createKankaServer() {
     entities.forEach((entity) => {
       tools.push({
         name: `list_${entity.plural}`,
-        description: `List ${entity.plural}`,
+        description: `List ${entity.plural}. Use per_page to keep responses small enough to be returned whole, and entry_filter to return only records whose entry is empty or filled.`,
         inputSchema: {
           type: "object",
           properties: {
             campaignId: { type: "number" },
-            page: { type: "number" },
+            page: { type: "number", description: "Page number (default 1)." },
+            per_page: {
+              type: "number",
+              minimum: 1,
+              maximum: MAX_PER_PAGE,
+              description: `Records per page, 1-${MAX_PER_PAGE}. Enforced by this server, so it holds even when the Kanka API returns a different page size. Omit to return the API's own page untouched; when set (or when entry_filter is used) the default is 25 with entries, 100 without.`,
+            },
             entries: {
               type: "boolean",
-              description: "Include full entry/entry_parsed text (default true). Set false to omit the long entry fields and shrink the response.",
+              description: "Include full entry/entry_parsed text (default true). Set false to omit the long entry fields, shrink the response, and get a has_entry boolean per record instead.",
+            },
+            entry_filter: {
+              type: "string",
+              enum: ENTRY_FILTERS,
+              description: "Keep only records with an empty entry ('empty'), only records with text ('filled'), or all of them ('all', default). Filtering is applied across the whole collection, not just one API page.",
             },
           },
           required: ["campaignId"],
@@ -174,15 +189,12 @@ async function createKankaServer() {
         const deleteMatch = name.match(/^delete_(.+)$/);
 
         if (listMatch) {
-          response = await kankaRequest(
-            `/campaigns/${args.campaignId}/${listMatch[1]}`,
-            "GET",
-            {},
-            { page: args.page }
+          const path = `/campaigns/${args.campaignId}/${listMatch[1]}`;
+          const body = await listEntities(
+            async (params) => (await kankaRequest(path, "GET", {}, params)).data,
+            args
           );
-          if (args.entries === false && response.data && Array.isArray(response.data.data)) {
-            response.data.data = response.data.data.map(({ entry, entry_parsed, ...rest }) => rest);
-          }
+          response = { data: body };
         } else if (getMatch) {
           const entity = entities.find((e) => e.name.toLowerCase() === getMatch[1]);
           if (!entity) throw new Error(`Unknown entity type: ${getMatch[1]}`);
