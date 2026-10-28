@@ -53,16 +53,63 @@ KANKA_API_TOKEN=your_token kanka-mcp
 
 ## Available tools
 
-The tool exposes 82 MCP tools for interacting with Kanka:
+The tool exposes 77 MCP tools for interacting with Kanka:
 
 - **list_campaigns** — List all campaigns
 - **search** — Search entities within a campaign
-- For each entity type (Character, Location, Family, Organization, Item, Note, Event, Calendar, Timeline, Creature, Race, Quest, Map, Journal, Ability, Entity):
+- For each entity type (Character, Location, Family, Organization, Item, Note, Event, Calendar, Timeline, Creature, Race, Quest, Map, Journal, Ability):
   - `list_<entities>` — List all
   - `get_<entity>` — Get details
   - `create_<entity>` — Create new
   - `update_<entity>` — Update existing
   - `delete_<entity>` — Delete existing
+
+### Listing options
+
+Big campaigns return list pages that are too large for some MCP clients to show
+in full, which hides the records in the middle of the response. Every
+`list_<entities>` tool takes these options to keep a page small and complete:
+
+| Option | Values | Description |
+| --- | --- | --- |
+| `page` | number | Page number, default `1`. |
+| `per_page` | 1–100 | Records per page. Enforced by this server, so it holds even when the Kanka API answers with a different page size. Omit it to return the API's own page untouched. |
+| `entries` | boolean | Default `true`. Set `false` to drop the long `entry`/`entry_parsed` fields and get a `has_entry` boolean per record instead. |
+| `entry_filter` | `all`, `empty`, `filled` | Default `all`. Keep only records whose entry is empty, or only those with text. Applied across the whole collection, not just one API page. |
+
+When `per_page` or `entry_filter` is used, the response carries this server's own
+`meta` instead of the API's:
+
+```json
+{
+  "data": [{ "id": 42, "name": "Thalion", "has_entry": false }],
+  "meta": {
+    "page": 1,
+    "per_page": 100,
+    "count": 1,
+    "has_more": false,
+    "entry_filter": "empty",
+    "entries_included": false,
+    "total_unfiltered": 168,
+    "api_pages_fetched": 12
+  }
+}
+```
+
+Notes:
+- `per_page` defaults to 25 with entries, 100 without, and pages are stitched
+  from as many API requests as needed.
+- `total_unfiltered` is the size of the whole collection as reported by Kanka —
+  it is not the number of records left after `entry_filter`. Walk pages until
+  `has_more` is `false`.
+- `scan_incomplete: true` means the budget of 50 API requests per call ran out
+  before the window was filled, so records past that point were not scanned.
+
+Example — find every character with no entry yet, in as few calls as possible:
+
+```json
+{ "campaignId": 235025, "per_page": 100, "entries": false, "entry_filter": "empty" }
+```
 
 ## Contributing
 

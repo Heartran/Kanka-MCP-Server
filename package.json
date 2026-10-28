@@ -1,6 +1,6 @@
 {
   "name": "kanka-mcp",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "type": "module",
   "description": "MCP tool for the Kanka worldbuilding API — runs locally via stdio.",
   "bin": {
@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node tests/test-stdio.js"
+    "test": "node tests/test-list.js && node tests/test-stdio.js && node tests/test-integration.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
