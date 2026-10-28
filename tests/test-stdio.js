@@ -41,6 +41,15 @@ async function run() {
     assert.ok(toolCount > 0, "Expected at least one tool");
     console.log(`   First tool: ${toolResult.tools[0].name}`);
 
+    const listCharacters = toolResult.tools.find((tool) => tool.name === "list_characters");
+    assert.ok(listCharacters, "Expected a list_characters tool");
+    const props = listCharacters.inputSchema.properties;
+    assert.ok(props.page, "list_characters should accept page");
+    assert.ok(props.per_page, "list_characters should accept per_page");
+    assert.ok(props.entries, "list_characters should accept entries");
+    assert.deepEqual(props.entry_filter.enum, ["all", "empty", "filled"]);
+    console.log("   list_characters exposes page, per_page, entries, entry_filter");
+
     await client.close();
     clearTimeout(timeout);
     console.log("All tests passed");
