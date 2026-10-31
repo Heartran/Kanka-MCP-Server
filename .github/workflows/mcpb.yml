@@ -4,7 +4,7 @@ name: MCP bundle (.mcpb)
 # bundle with the official mcpb CLI and prove it starts. Packing also runs on
 # pull requests so a broken bundle is caught before it lands on main. Only
 # pushes to main and v* tags keep the bundle as a workflow artifact; v* tags
-# also attach it to the GitHub release for that version.
+# also attach it to the GitHub release for that version (created if missing).
 
 on:
   pull_request:
@@ -141,6 +141,6 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/kanka-mcp-*.mcpb
-          # The release and its notes are written by hand (from GitHub's
-          # "Draft a new release", tag v<VERSION>); the job only attaches
-          # the file to it, and never touches the notes.
+          # Attaches the file to the release for the tag, and creates that
+          # release if it does not exist yet. No body is set here, so the
+          # notes are written by hand on the release afterwards.
