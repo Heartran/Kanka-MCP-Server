@@ -125,3 +125,16 @@ npm run lint
 npm run format:check
 npm test
 ```
+
+### Claude Desktop bundle (.mcpb)
+
+The `.mcpb` bundle is built by the `MCP bundle (.mcpb)` GitHub Actions workflow, not by hand. On every pull request it validates `manifest.json`, packs the bundle with the official `mcpb` CLI and starts it to check that it answers an MCP `initialize` request. Pushes to `main` keep the bundle as a workflow artifact, and `v*` tags attach it to the matching GitHub release.
+
+To cut a release, bump the version in both `package.json` and `manifest.json` (CI fails if they differ), merge, then tag `v<version>` and draft the release notes from GitHub's "Draft a new release". Files that must stay out of the bundle are listed in `.mcpbignore`.
+
+To build one locally:
+
+```bash
+npm ci --omit=dev
+npx @anthropic-ai/mcpb@2.1.2 pack . kanka-mcp.mcpb
+```
