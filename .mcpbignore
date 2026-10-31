@@ -1,0 +1,15 @@
+# Files that must not end up in the .mcpb bundle.
+# package.json stays in: index.js is ESM only because of "type": "module".
+/.github/
+/.claude/
+/tests/
+/dist/
+/AGENTS.md
+/CODE_OF_CONDUCT.md
+/CONTRIBUTING.md
+/.eslintrc.json
+/.prettierrc.json
+/.prettierignore
+/.editorconfig
+/package-lock.json
+*.mcpb
