@@ -1,0 +1,146 @@
+name: MCP bundle (.mcpb)
+
+# Validate the manifest on every pull request and push to main, then build the
+# bundle with the official mcpb CLI and prove it starts. Packing also runs on
+# pull requests so a broken bundle is caught before it lands on main. Only
+# pushes to main and v* tags keep the bundle as a workflow artifact; v* tags
+# also attach it to the GitHub release for that version.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+# Least privilege: only the release job below gets write access.
+permissions:
+  contents: read
+
+env:
+  MCPB_VERSION: "2.1.2"
+
+jobs:
+  validate:
+    name: mcpb validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Manifest and package.json must carry the same version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          node - <<'JS'
+          const fs = require("fs");
+          const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+          const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          if (manifest.version !== pkg.version) {
+            throw new Error(`manifest.json says ${manifest.version}, package.json says ${pkg.version}`);
+          }
+          if (process.env.REF_TYPE === "tag" && process.env.REF_NAME !== `v${pkg.version}`) {
+            throw new Error(`tag ${process.env.REF_NAME} does not match version v${pkg.version}`);
+          }
+          console.log("version", pkg.version, "OK");
+          JS
+
+      - name: Validate the manifest against the official schema
+        run: npx --yes @anthropic-ai/mcpb@${MCPB_VERSION} validate manifest.json
+
+  pack:
+    name: mcpb pack
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # The bundle ships node_modules, so install production dependencies only.
+      - name: Install production dependencies
+        run: npm ci --omit=dev
+
+      - name: Pack the bundle with the official CLI
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          mkdir dist
+          npx --yes @anthropic-ai/mcpb@${MCPB_VERSION} pack . "dist/kanka-mcp-${VERSION}.mcpb"
+
+      - name: Check what went in
+        run: |
+          python3 -I - <<'PY'
+          import os, zipfile
+          path = f"dist/kanka-mcp-{os.environ['VERSION']}.mcpb"
+          names = set(zipfile.ZipFile(path).namelist())
+          required = ["manifest.json", "package.json", "index.js", "config.js", "list.js", "icon.png",
+                      "node_modules/@modelcontextprotocol/sdk/package.json",
+                      "node_modules/axios/package.json"]
+          missing = [n for n in required if n not in names]
+          assert not missing, f"missing from bundle: {missing}"
+          forbidden = ("tests/", ".github/", ".claude/", "dist/", "node_modules/eslint/", "node_modules/prettier/")
+          bad = [n for n in names if n.startswith(forbidden) or n == "AGENTS.md" or n.endswith(".mcpb")]
+          assert not bad, f"should not be in the bundle: {bad[:10]}"
+          print(path, "OK:", len(names), "files")
+          PY
+
+      # A file list cannot catch ESM breakage or a missing transitive
+      # dependency, so unpack the bundle and talk MCP to it.
+      - name: Smoke test, the unpacked bundle answers initialize
+        run: |
+          mkdir "$RUNNER_TEMP/bundle"
+          python3 -I -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" \
+            "dist/kanka-mcp-${VERSION}.mcpb" "$RUNNER_TEMP/bundle"
+          cd "$RUNNER_TEMP/bundle"
+          KANKA_API_TOKEN=dummy timeout 30 python3 -I - <<'PY'
+          import json, subprocess
+          request = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                     "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+                                "clientInfo": {"name": "ci-smoke", "version": "0"}}}
+          proc = subprocess.Popen(["node", "index.js"], stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE, text=True)
+          proc.stdin.write(json.dumps(request) + "\n")
+          proc.stdin.flush()
+          reply = json.loads(proc.stdout.readline())
+          proc.kill()
+          assert "result" in reply, f"no result in reply: {reply}"
+          print("initialize OK:", reply["result"]["serverInfo"])
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: kanka-mcpb
+          path: dist/kanka-mcp-*.mcpb
+          if-no-files-found: error
+
+  release:
+    name: attach to release
+    needs: pack
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kanka-mcpb
+          path: dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/kanka-mcp-*.mcpb
+          # The release and its notes are written by hand (from GitHub's
+          # "Draft a new release", tag v<VERSION>); the job only attaches
+          # the file to it, and never touches the notes.
